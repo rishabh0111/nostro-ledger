@@ -40,7 +40,7 @@ CREATE TABLE account (
     tenant_id     uuid        NOT NULL REFERENCES tenant (id),
     id            uuid        NOT NULL,
     code          text        NOT NULL CHECK (length(code) BETWEEN 1 AND 100),
-    currency      char(3)     NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+    currency      text        NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
     constrained   boolean     NOT NULL,
     balance_minor bigint      NOT NULL DEFAULT 0,
     created_at    timestamptz NOT NULL DEFAULT now(),
@@ -108,7 +108,7 @@ CREATE TABLE posting (
     id           uuid    NOT NULL,
     entry_id     uuid    NOT NULL,
     account_id   uuid    NOT NULL,
-    currency     char(3) NOT NULL,
+    currency     text    NOT NULL,
     amount_minor bigint  NOT NULL CHECK (amount_minor <> 0),
     -- Denormalised from entry so an Account's history pages by keyset without a join.
     position     xid8    NOT NULL DEFAULT pg_current_xact_id(),

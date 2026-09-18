@@ -1,13 +1,16 @@
 package io.nostro.persistence;
 
+import io.nostro.persistence.entity.TenantScopedId;
 import jakarta.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
 import org.hibernate.StatelessSession;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 @Configuration(proxyBeanMethods = false)
+@EntityScan(basePackageClasses = TenantScopedId.class)
 class PersistenceConfiguration {
 
     /**
