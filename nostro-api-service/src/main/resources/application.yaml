@@ -4,3 +4,38 @@ spring:
   threads:
     virtual:
       enabled: true
+
+  # The request path connects as nostro_app: not the owner, no BYPASSRLS, and holding only the
+  # grants the migration gives it. Connecting as anything else silently bypasses every policy
+  # (docs/research/rls-pooling.md section 3).
+  datasource:
+    url: ${NOSTRO_DB_URL:jdbc:postgresql://localhost:5432/nostro}
+    username: nostro_app
+    password: ${NOSTRO_APP_PASSWORD}
+    hikari:
+      # Multi-row VALUES for batched Posting inserts (docs/research/hibernate-vs-the-schema.md section 7).
+      data-source-properties:
+        reWriteBatchedInserts: true
+
+  # Migrations run as the owner over the direct connection; they create the roles above.
+  flyway:
+    url: ${NOSTRO_DB_URL:jdbc:postgresql://localhost:5432/nostro}
+    user: ${NOSTRO_DB_OWNER:nostro}
+    password: ${NOSTRO_DB_OWNER_PASSWORD}
+    placeholders:
+      app_password: ${NOSTRO_APP_PASSWORD}
+      control_password: ${NOSTRO_CONTROL_PASSWORD}
+
+  jpa:
+    # Off: a lazy load during response serialisation would run after COMMIT, on a connection with
+    # no Tenant, and under fail-closed policies return an empty collection rather than an error.
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      # Explicit, not defaulted: on ORM 7 a StatelessSession uses the second-level cache by default,
+      # and a cached entity outlives the Tenant context that authorised loading it (ADR-0013).
+      hibernate.cache.use_second_level_cache: false
+      hibernate.jdbc.batch_size: 50
+      hibernate.order_inserts: true
+      hibernate.order_updates: true
