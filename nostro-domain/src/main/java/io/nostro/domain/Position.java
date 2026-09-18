@@ -20,7 +20,8 @@ public record Position(long installation, long xid8) {
     private static final Pattern TOKEN = Pattern.compile("(\\d{1,20}):(\\d{20})");
 
     public String token() {
-        return Long.toUnsignedString(installation) + ":" + String.format("%020d", xid8);
+        String digits = Long.toUnsignedString(xid8);
+        return Long.toUnsignedString(installation) + ":" + "0".repeat(20 - digits.length()) + digits;
     }
 
     public static Optional<Position> parse(String token) {

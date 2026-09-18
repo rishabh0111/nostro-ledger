@@ -81,18 +81,4 @@ class EntryBalanceTest {
                 new EntryId(UUID.randomUUID()), List.of(), Optional.empty(), "empty"));
     }
 
-    @Test
-    void aReversalIsTheNegationOfEveryPosting() {
-        var original = new Entry(
-                new EntryId(UUID.randomUUID()),
-                List.of(new Posting(A, Money.ofMinor(-1_000, USD)), new Posting(B, Money.ofMinor(1_000, USD))),
-                Optional.empty(),
-                "rent");
-
-        var reversal = original.reversal(new EntryId(UUID.randomUUID()), "rent, reversed");
-
-        assertThat(reversal.reverses()).contains(original.id());
-        assertThat(reversal.postings()).containsExactly(
-                new Posting(A, Money.ofMinor(1_000, USD)), new Posting(B, Money.ofMinor(-1_000, USD)));
-    }
 }

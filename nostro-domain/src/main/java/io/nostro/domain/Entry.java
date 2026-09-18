@@ -44,9 +44,4 @@ public record Entry(EntryId id, List<Posting> postings, Optional<EntryId> revers
         net.values().removeIf(Money::isZero);
         return net.isEmpty() ? Optional.empty() : Optional.of(new RecordOutcome.Unbalanced(Map.copyOf(net)));
     }
-
-    /** An ordinary Entry that undoes this one: every Posting negated, referencing this Entry. */
-    public Entry reversal(EntryId reversalId, String description) {
-        return new Entry(reversalId, postings.stream().map(Posting::negate).toList(), Optional.of(id), description);
-    }
 }

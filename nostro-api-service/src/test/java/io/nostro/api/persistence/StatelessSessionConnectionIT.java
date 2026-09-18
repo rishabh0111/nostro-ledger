@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import io.nostro.api.LedgerIntegrationTest;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
+import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.StatelessSession;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -117,7 +117,7 @@ class StatelessSessionConnectionIT extends LedgerIntegrationTest {
     @Test
     @DisplayName("the second-level cache is off, so nothing outlives the transaction that authorised loading it")
     void theSecondLevelCacheIsOff() {
-        var options = entityManagerFactory.unwrap(SessionFactory.class).getSessionFactoryOptions();
+        var options = entityManagerFactory.unwrap(SessionFactoryImplementor.class).getSessionFactoryOptions();
 
         assertThat(options.isSecondLevelCacheEnabled()).isFalse();
         assertThat(options.isQueryCacheEnabled()).isFalse();

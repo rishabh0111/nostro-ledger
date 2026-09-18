@@ -8,7 +8,7 @@ import java.util.StringJoiner;
  * Record a new Entry from the Postings given.
  *
  * @param idempotencyKey the key the Entry is recorded at most once under
- * @param postings       the legs, in the order the caller gave them
+ * @param postings       the Postings, in the order the caller gave them
  * @param description    free text, may be null
  */
 public record RecordEntry(IdempotencyKey idempotencyKey, List<Posting> postings, String description)

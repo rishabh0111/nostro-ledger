@@ -3,6 +3,7 @@ package io.nostro.persistence.outbox;
 import io.nostro.domain.Entry;
 import io.nostro.domain.Position;
 import io.nostro.domain.TenantId;
+import io.nostro.persistence.entity.PostingEntity;
 import java.util.List;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -17,7 +18,7 @@ import tools.jackson.databind.json.JsonMapper;
  * @param position    the Position the Entry created, as its token
  * @param reverses    the Entry this one reverses, or null
  * @param description the caller's free text, or null
- * @param postings    every Posting of the Entry
+ * @param postings    every Posting of the Entry, each with its own id
  */
 public record EntryRecorded(
         String tenantId,
@@ -29,18 +30,19 @@ public record EntryRecorded(
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    public record PostingRecorded(String accountId, String currency, long amountMinor) {
+    public record PostingRecorded(String postingId, String accountId, String currency, long amountMinor) {
     }
 
-    public static EntryRecorded of(TenantId tenant, Entry entry, Position position) {
+    public static EntryRecorded of(TenantId tenant, Entry entry, List<PostingEntity> postings, Position position) {
         return new EntryRecorded(
                 tenant.toString(),
                 entry.id().toString(),
                 position.token(),
                 entry.reverses().map(Object::toString).orElse(null),
                 entry.description(),
-                entry.postings().stream()
-                        .map(p -> new PostingRecorded(p.account().toString(), p.amount().currency().code(), p.amount().minor()))
+                postings.stream()
+                        .map(p -> new PostingRecorded(p.getId().id().toString(), p.accountId().toString(),
+                                p.getAmount().currency(), p.getAmount().amountMinor()))
                         .toList());
     }
 

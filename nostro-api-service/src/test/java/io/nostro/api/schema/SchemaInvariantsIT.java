@@ -149,7 +149,7 @@ class SchemaInvariantsIT extends LedgerIntegrationTest {
         var lopsided = uuid();
         var crossed = uuid();
 
-        var oneLeg = catchThrowable(() -> inTransactionAs(a, () -> {
+        var onePosting = catchThrowable(() -> inTransactionAs(a, () -> {
             insertEntry(a, lopsided);
             insertPosting(a, lopsided, cash, "USD", 100);
         }));
@@ -161,8 +161,8 @@ class SchemaInvariantsIT extends LedgerIntegrationTest {
         var recorded = inTransactionAs(a, () -> jdbc()
                 .sql("SELECT count(*) FROM entry WHERE id IN (?, ?)").params(lopsided, crossed).query(Long.class).single());
 
-        assertThat(sqlState(oneLeg)).isEqualTo("23514");
-        assertThat(oneLeg).hasMessageContaining("entry_balances_per_currency");
+        assertThat(sqlState(onePosting)).isEqualTo("23514");
+        assertThat(onePosting).hasMessageContaining("entry_balances_per_currency");
         assertThat(sqlState(perCurrency)).isEqualTo("23514");
         assertThat(recorded).isZero();
     }

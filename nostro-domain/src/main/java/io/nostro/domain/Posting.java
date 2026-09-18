@@ -3,8 +3,8 @@ package io.nostro.domain;
 import java.util.Objects;
 
 /**
- * One leg of an Entry: a signed Amount applied to exactly one Account. A Posting never exists on
- * its own.
+ * A signed Amount applied to exactly one Account, as one part of an Entry. A Posting never exists
+ * on its own.
  *
  * <p>A zero Amount is not a Posting. It would balance trivially and record nothing, so it is
  * refused at construction rather than tolerated.

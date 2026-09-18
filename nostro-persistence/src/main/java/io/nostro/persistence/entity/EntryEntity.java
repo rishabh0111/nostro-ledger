@@ -12,9 +12,10 @@ import java.util.UUID;
 import org.hibernate.annotations.Immutable;
 
 /**
- * An Entry row. Insert-only. {@code @Immutable} is a declaration of intent and a dirty-checking
- * saving; it silently ignores updates and says nothing about deletes, so the barrier is the
- * revoked grants on the request-path role (docs/research/hibernate-vs-the-schema.md section 4).
+ * An Entry row. Insert-only. {@code @Immutable} is a declaration of intent: on ORM 7 it makes an
+ * HQL bulk update throw, but it still ignores dirty-checked changes silently, says nothing about
+ * deletes, and covers no native SQL. The barrier is the revoked grants on the request-path role
+ * (docs/research/hibernate-vs-the-schema.md section 4).
  *
  * <p>{@code position} is not mapped: it is an {@code xid8} assigned by the database inside the
  * recording transaction, and the writer reads it back with a native query.

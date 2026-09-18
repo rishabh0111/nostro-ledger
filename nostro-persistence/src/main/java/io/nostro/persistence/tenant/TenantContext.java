@@ -25,6 +25,11 @@ public final class TenantContext {
         return Optional.ofNullable(CURRENT.get());
     }
 
+    /** The bound Tenant, for code that cannot proceed without one. Its absence there is a programmer error. */
+    public static TenantId required() {
+        return current().orElseThrow(() -> new IllegalStateException("no Tenant is bound to the current thread"));
+    }
+
     /**
      * Binds the Tenant for the current thread until the returned scope is closed. Nesting is
      * refused: a request acts for exactly one Tenant, and a second binding is a bug.
@@ -38,12 +43,14 @@ public final class TenantContext {
         return CURRENT::remove;
     }
 
+    @SuppressWarnings("try")
     public static <T> T runAs(TenantId tenant, Supplier<T> work) {
         try (var ignored = bind(tenant)) {
             return work.get();
         }
     }
 
+    @SuppressWarnings("try")
     public static void runAs(TenantId tenant, Runnable work) {
         try (var ignored = bind(tenant)) {
             work.run();

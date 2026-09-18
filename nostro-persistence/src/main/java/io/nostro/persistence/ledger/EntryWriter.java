@@ -81,8 +81,7 @@ class EntryWriter {
 
     @Transactional
     RecordOutcome write(LedgerCommand command) {
-        TenantId tenant = TenantContext.current()
-                .orElseThrow(() -> new IllegalStateException("recording an Entry requires a bound Tenant"));
+        TenantId tenant = TenantContext.required();
 
         var recorded = session.get(IdempotencyRecordEntity.class, IdempotencyRecordEntity.Id.of(tenant, command.idempotencyKey()));
         if (recorded != null) {
@@ -130,7 +129,8 @@ class EntryWriter {
         session.insert(entryRow);
         // Second, so a duplicate key in flight blocks here, before any Account row is locked.
         session.insert(new IdempotencyRecordEntity(tenant, command.idempotencyKey(), command.fingerprint(), entry.id()));
-        session.insertMultiple(postings.stream().map(p -> new PostingEntity(entryRow, p)).toList());
+        var postingRows = postings.stream().map(p -> new PostingEntity(entryRow, p)).toList();
+        session.insertMultiple(postingRows);
 
         Optional<Refused> floor = moveConstrainedBalances(tenant, postings, accounts);
         if (floor.isPresent()) {
@@ -138,7 +138,7 @@ class EntryWriter {
             return floor.get();
         }
 
-        session.insert(new OutboxEntity(tenant, entry.id(), EntryRecorded.of(tenant, entry, position).toJson()));
+        session.insert(new OutboxEntity(tenant, entry.id(), EntryRecorded.of(tenant, entry, postingRows, position).toJson()));
         return new Recorded(entry.id(), position);
     }
 
@@ -146,7 +146,7 @@ class EntryWriter {
         if (!recorded.getRequestFingerprint().equals(command.fingerprint())) {
             return new IdempotencyKeyReused(command.idempotencyKey());
         }
-        long xid8 = Long.parseUnsignedLong(session
+        long xid8 = xid8(session
                 .createNativeQuery("SELECT position::text FROM entry WHERE tenant_id = :tenant AND id = :id", String.class)
                 .setParameter("tenant", tenant.value())
                 .setParameter("id", recorded.entryId().value())
@@ -211,8 +211,11 @@ class EntryWriter {
 
     /** The xid8 Postgres assigned this transaction: the Position every row written here will carry. */
     private long currentTransactionId() {
-        return Long.parseUnsignedLong(session
-                .createNativeQuery("SELECT pg_current_xact_id()::text", String.class)
-                .getSingleResult());
+        return xid8(session.createNativeQuery("SELECT pg_current_xact_id()::text", String.class).getSingleResult());
+    }
+
+    /** pgjdbc has no xid8 type; it travels as text, and it is unsigned. */
+    private static long xid8(String text) {
+        return Long.parseUnsignedLong(text);
     }
 }

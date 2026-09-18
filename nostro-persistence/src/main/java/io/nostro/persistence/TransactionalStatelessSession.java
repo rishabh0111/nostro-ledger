@@ -61,6 +61,18 @@ public final class TransactionalStatelessSession {
 
         TransactionSynchronizationManager.bindResource(RESOURCE_KEY, session);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            // A REQUIRES_NEW transaction suspends the outer one; the outer session must go with it,
+            // or the inner transaction would run on the outer connection, under the outer Tenant.
+            @Override
+            public void suspend() {
+                TransactionSynchronizationManager.unbindResource(RESOURCE_KEY);
+            }
+
+            @Override
+            public void resume() {
+                TransactionSynchronizationManager.bindResource(RESOURCE_KEY, session);
+            }
+
             @Override
             public void afterCompletion(int status) {
                 TransactionSynchronizationManager.unbindResourceIfPossible(RESOURCE_KEY);

@@ -14,6 +14,14 @@ class PositionTest {
     }
 
     @Test
+    void anXid8AboveTheSignedRangeStillRendersUnsignedAndZeroPadded() {
+        var p = new Position(1L, -1L); // 2^64 - 1 as an unsigned xid8
+        assertThat(p.token()).isEqualTo("1:18446744073709551615");
+        assertThat(Position.parse(p.token())).contains(p);
+        assertThat(p.isAtLeast(new Position(1L, Long.MAX_VALUE))).isTrue();
+    }
+
+    @Test
     void aTokenRoundTrips() {
         var p = new Position(123L, 9_000_000_000L);
         assertThat(Position.parse(p.token())).contains(p);

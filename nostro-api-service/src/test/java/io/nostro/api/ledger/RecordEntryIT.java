@@ -83,8 +83,8 @@ class RecordEntryIT extends LedgerIntegrationTest {
         var cash = open(tenant, "cash", USD, false);
         var bank = open(tenant, "bank", USD, false);
 
-        var first = assertRecorded(record(tenant, transfer(cash, bank, 1)));
-        var second = assertRecorded(record(tenant, transfer(cash, bank, 2)));
+        var first = assertRecorded(record(tenant, moving(cash, bank, 1)));
+        var second = assertRecorded(record(tenant, moving(cash, bank, 2)));
 
         assertThat(second.position().isAtLeast(first.position())).isTrue();
         assertThat(first.position().isAtLeast(second.position())).isFalse();
@@ -114,7 +114,7 @@ class RecordEntryIT extends LedgerIntegrationTest {
         var cashOfA = open(a, "cash", USD, false);
         var bankOfB = open(b, "bank", USD, false);
 
-        var outcome = record(a, transfer(cashOfA, bankOfB, 100));
+        var outcome = record(a, moving(cashOfA, bankOfB, 100));
 
         assertThat(outcome).isEqualTo(new UnknownAccount(bankOfB));
         assertThat(entryCount(a)).isZero();
@@ -140,9 +140,9 @@ class RecordEntryIT extends LedgerIntegrationTest {
         var wallet = open(tenant, "wallet", USD, true);
         var merchant = open(tenant, "merchant", USD, false);
         var funding = open(tenant, "funding", USD, false);
-        assertRecorded(record(tenant, transfer(funding, wallet, 100)));
+        assertRecorded(record(tenant, moving(funding, wallet, 100)));
 
-        var outcome = record(tenant, transfer(wallet, merchant, 150));
+        var outcome = record(tenant, moving(wallet, merchant, 150));
 
         assertThat(outcome).isEqualTo(new InsufficientBalance(wallet));
         assertThat(entryCount(tenant)).isEqualTo(1);
@@ -157,7 +157,7 @@ class RecordEntryIT extends LedgerIntegrationTest {
         var overdraft = open(tenant, "overdraft", USD, false);
         var merchant = open(tenant, "merchant", USD, false);
 
-        assertRecorded(record(tenant, transfer(overdraft, merchant, 500)));
+        assertRecorded(record(tenant, moving(overdraft, merchant, 500)));
 
         assertThat(storedBalance(tenant, overdraft)).as("no running balance is kept").isZero();
         assertThat(sumOfPostings(tenant, overdraft)).isEqualTo(-500);
@@ -171,9 +171,9 @@ class RecordEntryIT extends LedgerIntegrationTest {
         var bank = open(tenant, "bank", USD, false);
         var key = key();
 
-        var first = assertRecorded(record(tenant, new RecordEntry(key, legs(cash, bank, 100), "rent")));
-        var replay = record(tenant, new RecordEntry(key, legs(cash, bank, 100), "rent"));
-        var reused = record(tenant, new RecordEntry(key, legs(cash, bank, 101), "rent"));
+        var first = assertRecorded(record(tenant, new RecordEntry(key, postings(cash, bank, 100), "rent")));
+        var replay = record(tenant, new RecordEntry(key, postings(cash, bank, 100), "rent"));
+        var reused = record(tenant, new RecordEntry(key, postings(cash, bank, 101), "rent"));
 
         assertThat(replay).isEqualTo(first);
         assertThat(reused).isEqualTo(new IdempotencyKeyReused(key));
@@ -186,7 +186,7 @@ class RecordEntryIT extends LedgerIntegrationTest {
         var tenant = newTenant();
         var cash = open(tenant, "cash", USD, false);
         var bank = open(tenant, "bank", USD, false);
-        var command = new RecordEntry(key(), legs(cash, bank, 100), "rent");
+        var command = new RecordEntry(key(), postings(cash, bank, 100), "rent");
 
         var outcomes = Concurrently.run(16, () -> record(tenant, command));
 
@@ -202,18 +202,18 @@ class RecordEntryIT extends LedgerIntegrationTest {
         var wallet = open(tenant, "wallet", USD, true);
         var merchant = open(tenant, "merchant", USD, false);
         var funding = open(tenant, "funding", USD, false);
-        var fund = assertRecorded(record(tenant, transfer(funding, wallet, 100)));
-        var spend = assertRecorded(record(tenant, transfer(wallet, merchant, 60)));
+        var fund = assertRecorded(record(tenant, moving(funding, wallet, 100)));
+        var spend = assertRecorded(record(tenant, moving(wallet, merchant, 60)));
 
         var unknown = record(tenant, new ReverseEntry(key(), EntryId.random(), null));
-        var refundRefused = record(tenant, new ReverseEntry(key(), fund.entry(), "unwind funding"));
-        var refund = assertRecorded(record(tenant, new ReverseEntry(key(), spend.entry(), "refund")));
-        var twice = record(tenant, new ReverseEntry(key(), spend.entry(), "refund again"));
+        var reversalRefused = record(tenant, new ReverseEntry(key(), fund.entry(), "unwind funding"));
+        var reversal = assertRecorded(record(tenant, new ReverseEntry(key(), spend.entry(), "reverse the spend")));
+        var twice = record(tenant, new ReverseEntry(key(), spend.entry(), "reverse the spend again"));
 
         assertThat(unknown).isInstanceOf(UnknownEntry.class);
-        assertThat(refundRefused).as("the wallet holds 40; unwinding 100 would breach the floor")
+        assertThat(reversalRefused).as("the wallet holds 40; unwinding 100 would breach the floor")
                 .isEqualTo(new InsufficientBalance(wallet));
-        assertThat(postingRows(tenant, refund.entry())).extracting(r -> r.get("account_id"), r -> r.get("amount_minor"))
+        assertThat(postingRows(tenant, reversal.entry())).extracting(r -> r.get("account_id"), r -> r.get("amount_minor"))
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple(wallet.value(), 60L),
                         org.assertj.core.groups.Tuple.tuple(merchant.value(), -60L));
@@ -250,7 +250,7 @@ class RecordEntryIT extends LedgerIntegrationTest {
         var tenant = newTenant();
         var cash = open(tenant, "cash", USD, false);
         var bank = open(tenant, "bank", USD, false);
-        var recorded = assertRecorded(record(tenant, transfer(cash, bank, 100)));
+        var recorded = assertRecorded(record(tenant, moving(cash, bank, 100)));
 
         // ORM 7 default: a bulk update against an @Immutable entity throws before reaching the database.
         var hql = catchThrowable(() -> inTransactionAs(tenant, () -> statelessSession()
@@ -280,9 +280,9 @@ class RecordEntryIT extends LedgerIntegrationTest {
         var wallet = open(tenant, "wallet", USD, true);
         var merchant = open(tenant, "merchant", USD, false);
         var funding = open(tenant, "funding", USD, false);
-        assertRecorded(record(tenant, transfer(funding, wallet, 1_000)));
+        assertRecorded(record(tenant, moving(funding, wallet, 1_000)));
 
-        var outcomes = Concurrently.run(40, () -> record(tenant, transfer(wallet, merchant, 100)));
+        var outcomes = Concurrently.run(40, () -> record(tenant, moving(wallet, merchant, 100)));
 
         assertThat(outcomes).hasSize(40);
         assertThat(outcomes.stream().filter(Recorded.class::isInstance)).hasSize(10);
@@ -292,6 +292,32 @@ class RecordEntryIT extends LedgerIntegrationTest {
         assertThat(storedBalance(tenant, wallet)).isZero();
         assertThat(sumOfPostings(tenant, wallet)).as("stored balance agrees with SUM over Postings").isZero();
         assertThat(outboxCount(tenant)).isEqualTo(11);
+    }
+
+    @Test
+    @DisplayName("Entries touching two Constrained Accounts in opposite orders never deadlock: balances are moved in id order")
+    void oppositeOrderWritersDoNotDeadlock() throws Exception {
+        var tenant = newTenant();
+        var left = open(tenant, "left", USD, true);
+        var right = open(tenant, "right", USD, true);
+        var funding = open(tenant, "funding", USD, false);
+        assertRecorded(record(tenant, moving(funding, left, 100_000)));
+        assertRecorded(record(tenant, moving(funding, right, 100_000)));
+
+        // Each writer alternates direction, so at any moment some are posting left->right and
+        // others right->left. Without a deterministic lock order this is the textbook deadlock.
+        var outcomes = Concurrently.run(24, () -> {
+            var results = new java.util.ArrayList<RecordOutcome>();
+            for (int i = 0; i < 10; i++) {
+                results.add(record(tenant, i % 2 == 0 ? moving(left, right, 1) : moving(right, left, 1)));
+            }
+            return results;
+        });
+
+        assertThat(outcomes.stream().flatMap(List::stream)).hasSize(240).allSatisfy(o -> assertThat(o).isInstanceOf(Recorded.class));
+        assertThat(storedBalance(tenant, left) + storedBalance(tenant, right)).isEqualTo(200_000);
+        assertThat(storedBalance(tenant, left)).isEqualTo(sumOfPostings(tenant, left));
+        assertThat(storedBalance(tenant, right)).isEqualTo(sumOfPostings(tenant, right));
     }
 
     // -- helpers ---------------------------------------------------------------------------------
@@ -305,11 +331,11 @@ class RecordEntryIT extends LedgerIntegrationTest {
         return TenantContext.runAs(tenant, () -> accounts.open(account)).id();
     }
 
-    private static RecordEntry transfer(AccountId from, AccountId to, long minor) {
-        return new RecordEntry(key(), legs(from, to, minor), null);
+    private static RecordEntry moving(AccountId from, AccountId to, long minor) {
+        return new RecordEntry(key(), postings(from, to, minor), null);
     }
 
-    private static List<Posting> legs(AccountId from, AccountId to, long minor) {
+    private static List<Posting> postings(AccountId from, AccountId to, long minor) {
         return List.of(new Posting(from, Money.ofMinor(-minor, USD)), new Posting(to, Money.ofMinor(minor, USD)));
     }
 
