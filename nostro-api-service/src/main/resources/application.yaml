@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: nostro-api
+  threads:
+    virtual:
+      enabled: true

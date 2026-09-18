@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.nostro</groupId>
+  <artifactId>nostro-parent</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <name>Nostro</name>
+  <description>A multitenant double-entry ledger whose invariants live in the schema.</description>
+
+  <!--
+    The aggregator and the dependency parent are one POM. Spring Boot's BOM is imported rather than
+    used as the parent so this POM keeps its own pluginManagement and version (ADR-0013;
+    docs/research/grpc-and-multi-module-layout.md section 3).
+  -->
+  <modules>
+    <module>nostro-domain</module>
+    <module>nostro-persistence</module>
+    <module>nostro-test-support</module>
+    <module>nostro-api-service</module>
+  </modules>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+    <spring-boot.version>4.1.1</spring-boot.version>
+
+    <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
+    <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>3.6.0</maven-failsafe-plugin.version>
+    <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+    <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.nostro</groupId>
+        <artifactId>nostro-domain</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.nostro</groupId>
+        <artifactId>nostro-persistence</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.nostro</groupId>
+        <artifactId>nostro-test-support</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>${maven-compiler-plugin.version}</version>
+          <configuration>
+            <release>21</release>
+            <parameters>true</parameters>
+            <compilerArgs>
+              <arg>-Xlint:all,-processing,-serial</arg>
+            </compilerArgs>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>${maven-surefire-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>${maven-failsafe-plugin.version}</version>
+          <executions>
+            <execution>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-jar-plugin</artifactId>
+          <version>${maven-jar-plugin.version}</version>
+        </plugin>
+        <!--
+          Configuration only. The repackage execution is declared in each service module, never here:
+          an inherited repackage moves a library's classes to BOOT-INF/classes, where a dependent
+          module's compiler cannot find them (docs/research/grpc-and-multi-module-layout.md section 4).
+        -->
+        <plugin>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-maven-plugin</artifactId>
+          <version>${spring-boot.version}</version>
+          <configuration>
+            <layers>
+              <enabled>true</enabled>
+            </layers>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>${maven-enforcer-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>enforce-toolchain</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireJavaVersion>
+                  <version>[21,)</version>
+                </requireJavaVersion>
+                <requireMavenVersion>
+                  <version>[3.9,)</version>
+                </requireMavenVersion>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
