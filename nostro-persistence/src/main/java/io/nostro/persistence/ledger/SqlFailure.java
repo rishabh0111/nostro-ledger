@@ -38,6 +38,11 @@ record SqlFailure(String sqlState, Optional<String> constraint) {
         return Optional.empty();
     }
 
+    /** Whether the failure is a unique violation of the constraint named, wherever in the cause chain Postgres said so. */
+    static boolean violates(Throwable failure, String constraintName) {
+        return of(failure).map(sql -> sql.violates(constraintName)).orElse(false);
+    }
+
     static boolean isTransient(Throwable failure) {
         return of(failure).map(SqlFailure::isTransient).orElse(false);
     }

@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import io.nostro.api.LedgerIntegrationTest;
+import io.nostro.api.problem.ProblemType;
 import io.nostro.persistence.tenant.TenantContext;
 import java.time.Clock;
 import java.time.Duration;
@@ -35,7 +36,7 @@ class AuthenticationIT extends LedgerIntegrationTest {
     RequiredPermissions requiredPermissions;
 
     @Test
-    @DisplayName("a valid credential for one Tenant, used on a request naming another Tenant's Account, returns nothing")
+    @DisplayName("a valid credential for one Tenant, used on a request naming another Tenant's Account, finds nothing")
     void anotherTenantsAccountIsAbsentNotForbidden() throws Exception {
         var a = newTenant();
         var b = newTenant();
@@ -48,8 +49,7 @@ class AuthenticationIT extends LedgerIntegrationTest {
                 .andExpect(jsonPath("$.id").value(accountOfB.toString()))
                 .andExpect(jsonPath("$.code").value("cash"));
         http.perform(get("/accounts/{id}", accountOfB).header(HttpHeaders.AUTHORIZATION, bearer(keyOfA)))
-                .andExpect(status().isNotFound())
-                .andExpect(content().string(""));
+                .andExpect(problem(ProblemType.UNKNOWN_ACCOUNT));
     }
 
     @Test
@@ -170,6 +170,7 @@ class AuthenticationIT extends LedgerIntegrationTest {
         assertThat(requiredPermissions.verifiedEndpoints())
                 .contains("AccountsController.open", "AccountsController.find", "LoginController.login",
                         "BalanceController.read", "AccountHistoryController.newestFirst",
+                        "EntriesController.record", "EntriesController.reverse",
                         "ControlPlaneController.createTenant", "ControlPlaneController.issueApiKey",
                         "ControlPlaneController.revokeApiKey", "ControlPlaneController.createStaffUser",
                         "ControlPlaneController.revokeStaffUser");

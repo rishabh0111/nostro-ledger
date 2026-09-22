@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import io.nostro.api.LedgerIntegrationTest;
+import io.nostro.api.problem.ProblemType;
 import io.nostro.api.auth.ApiKey;
 import io.nostro.api.auth.Permission;
 import io.nostro.domain.AccountId;
@@ -108,8 +109,7 @@ class BalanceIT extends LedgerIntegrationTest {
 
         for (var id : List.of(cashOfA.value(), uuid())) {
             http.perform(get("/accounts/{id}/balance", id).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
-                    .andExpect(status().isNotFound())
-                    .andExpect(content().string(""));
+                    .andExpect(problem(ProblemType.UNKNOWN_ACCOUNT));
         }
         assertThat(balance(keyOfA, cashOfA).get("balance").get("amount").asString()).isEqualTo("-1.00");
     }

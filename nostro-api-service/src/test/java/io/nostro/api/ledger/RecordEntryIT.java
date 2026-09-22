@@ -328,7 +328,8 @@ class RecordEntryIT extends LedgerIntegrationTest {
 
     private AccountId open(TenantId tenant, String code, Currency currency, boolean constrained) {
         var account = new Account(AccountId.random(), code, currency, constrained);
-        return TenantContext.runAs(tenant, () -> accounts.open(account)).id();
+        assertThat(TenantContext.runAs(tenant, () -> accounts.open(account))).isInstanceOf(Accounts.OpenOutcome.Opened.class);
+        return account.id();
     }
 
     private static RecordEntry moving(AccountId from, AccountId to, long minor) {

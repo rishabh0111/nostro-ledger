@@ -156,7 +156,8 @@ class TenantContextIT extends LedgerIntegrationTest {
 
     private AccountId open(TenantId tenant, String code, boolean constrained) {
         var account = new Account(AccountId.random(), code, USD, constrained);
-        return TenantContext.runAs(tenant, () -> accounts.open(account)).id();
+        assertThat(TenantContext.runAs(tenant, () -> accounts.open(account))).isInstanceOf(Accounts.OpenOutcome.Opened.class);
+        return account.id();
     }
 
     private RecordOutcome record(TenantId tenant, LedgerCommand command) {

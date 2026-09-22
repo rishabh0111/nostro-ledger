@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import io.nostro.api.LedgerIntegrationTest;
+import io.nostro.api.problem.ProblemType;
 import io.nostro.api.auth.Permission;
 import java.util.List;
 import java.util.UUID;
@@ -89,8 +90,7 @@ class ControlPlaneIT extends LedgerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("cash"));
         http.perform(get("/accounts/{id}", accountOfB).header(HttpHeaders.AUTHORIZATION, "Bearer " + keyOfA))
-                .andExpect(status().isNotFound())
-                .andExpect(content().string(""));
+                .andExpect(problem(ProblemType.UNKNOWN_ACCOUNT));
     }
 
     @Test
@@ -166,7 +166,7 @@ class ControlPlaneIT extends LedgerIntegrationTest {
     }
 
     @Test
-    @DisplayName("an unknown Tenant is 404, a taken name is 409, an unknown permission is 400")
+    @DisplayName("an unknown Tenant is 404, a taken name is 409, an unknown permission is 400, each with its own type")
     void theControlPlaneRefusesWhatItCannotDo() throws Exception {
         var name = "tenant-" + uuid();
         createTenant(name);
@@ -175,19 +175,22 @@ class ControlPlaneIT extends LedgerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(new ControlPlaneController.CreateTenant(name))))
                 .andExpect(status().isConflict())
-                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value(ProblemType.TENANT_NAME_TAKEN.uri().toString()));
         http.perform(post("/control/tenants/{tenant}/api-keys", uuid()).header(HttpHeaders.AUTHORIZATION, controlBearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"label": "orphan", "permissions": ["LEDGER_READ"]}
                                 """))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type").value(ProblemType.UNKNOWN_TENANT.uri().toString()));
         http.perform(post("/control/tenants/{tenant}/api-keys", uuid()).header(HttpHeaders.AUTHORIZATION, controlBearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"label": "typo", "permissions": ["LEDGER_ADMIN"]}
                                 """))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value(ProblemType.UNKNOWN_PERMISSION.uri().toString()));
     }
 
     @Test

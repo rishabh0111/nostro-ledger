@@ -1,10 +1,13 @@
 package io.nostro.api;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import io.nostro.api.auth.ApiKey;
 import io.nostro.api.auth.Permission;
+import io.nostro.api.problem.ProblemType;
 import io.nostro.domain.AccountId;
 import io.nostro.domain.Currency;
 import io.nostro.domain.EntryRecorder;
@@ -33,6 +36,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultMatcher;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -193,6 +197,17 @@ public abstract class LedgerIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         return json.readTree(result.getResponse().getContentAsString()).get("token").asString();
+    }
+
+    /** The whole Problem Details contract for one type: its status, the media type, and the type, title and status fields. */
+    protected static ResultMatcher problem(ProblemType type) {
+        return result -> {
+            status().is(type.status().value()).match(result);
+            content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON).match(result);
+            jsonPath("$.type").value(type.uri().toString()).match(result);
+            jsonPath("$.title").value(type.title()).match(result);
+            jsonPath("$.status").value(type.status().value()).match(result);
+        };
     }
 
     protected static String bearer(ApiKey key) {

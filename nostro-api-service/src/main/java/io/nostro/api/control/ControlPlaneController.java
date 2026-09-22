@@ -2,27 +2,26 @@ package io.nostro.api.control;
 
 import io.nostro.api.auth.Permission;
 import io.nostro.api.auth.Requires;
+import io.nostro.api.problem.ProblemType;
 import io.nostro.domain.TenantId;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * The control plane over HTTP (ADR-0015). Every handler requires {@link Permission#CONTROL}, which
  * only the bootstrap credential holds, so no ledger credential reaches this surface; and the
  * bootstrap credential holds nothing else, so it reaches no other. The Tenant is a path segment
  * here and nowhere else in the API: this is the one caller that acts across Tenants, and it names
- * the one it means. The refusals here are the plainest {@code
- * ResponseStatusException}s until the error model lands.
+ * the one it means. Each refusal is a Problem Details body with its own type (ADR-0014).
  */
 @RestController
 class ControlPlaneController {
@@ -41,9 +40,9 @@ class ControlPlaneController {
                     .created(URI.create("/control/tenants/" + created.tenant().id().value()))
                     .body(TenantResponse.of(created.tenant()));
             case ControlPlane.TenantOutcome.NameTaken taken ->
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "a Tenant named " + taken.name() + " exists");
+                    throw ProblemType.TENANT_NAME_TAKEN.exception("a tenant named '" + taken.name() + "' exists");
             case ControlPlane.TenantOutcome.Invalid invalid ->
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalid.reason());
+                    throw ProblemType.MALFORMED.exception(invalid.reason());
         };
     }
 
@@ -56,9 +55,9 @@ class ControlPlaneController {
                     .created(URI.create("/control/tenants/" + tenant + "/api-keys/" + issued.apiKey().id()))
                     .body(IssuedApiKeyResponse.of(issued.apiKey()));
             case ControlPlane.IssueOutcome.UnknownTenant unknown ->
-                    throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no such Tenant");
+                    throw ProblemType.UNKNOWN_TENANT.exception("tenant " + unknown.tenant() + " does not exist");
             case ControlPlane.IssueOutcome.Invalid invalid ->
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalid.reason());
+                    throw ProblemType.MALFORMED.exception(invalid.reason());
         };
     }
 
@@ -79,11 +78,11 @@ class ControlPlaneController {
                     .created(URI.create("/control/tenants/" + tenant + "/staff-users/" + created.staffUser().id()))
                     .body(StaffUserResponse.of(created.staffUser()));
             case ControlPlane.StaffOutcome.UnknownTenant unknown ->
-                    throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no such Tenant");
+                    throw ProblemType.UNKNOWN_TENANT.exception("tenant " + unknown.tenant() + " does not exist");
             case ControlPlane.StaffOutcome.UsernameTaken taken ->
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "a staff user named " + taken.username() + " exists");
+                    throw ProblemType.STAFF_USERNAME_TAKEN.exception("a staff user named '" + taken.username() + "' exists");
             case ControlPlane.StaffOutcome.Invalid invalid ->
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalid.reason());
+                    throw ProblemType.MALFORMED.exception(invalid.reason());
         };
     }
 
@@ -105,7 +104,8 @@ class ControlPlaneController {
         try {
             return names == null ? List.of() : names.stream().map(Permission::valueOf).toList();
         } catch (IllegalArgumentException unknown) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unknown permission");
+            throw ProblemType.UNKNOWN_PERMISSION.exception(
+                    "permissions must each be one of " + Arrays.toString(Permission.values()));
         }
     }
 

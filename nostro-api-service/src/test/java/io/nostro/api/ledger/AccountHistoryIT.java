@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import io.nostro.api.LedgerIntegrationTest;
+import io.nostro.api.problem.ProblemType;
 import io.nostro.api.auth.ApiKey;
 import io.nostro.api.auth.Permission;
 import io.nostro.domain.AccountId;
@@ -135,8 +136,7 @@ class AccountHistoryIT extends LedgerIntegrationTest {
         recordEntry(a, cashOfA, new AccountId(openAccount(keyOfA, "bank")), 100);
 
         http.perform(get("/accounts/{id}/postings", cashOfA.value()).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
-                .andExpect(status().isNotFound())
-                .andExpect(content().string(""));
+                .andExpect(problem(ProblemType.UNKNOWN_ACCOUNT));
         assertThat(history(keyOfA, cashOfA).get("postings")).hasSize(1);
     }
 

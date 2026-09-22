@@ -69,11 +69,10 @@ public class JpaEntryRecorder implements EntryRecorder {
         try {
             return writer.write(command);
         } catch (RuntimeException failure) {
-            var sql = SqlFailure.of(failure);
-            if (sql.isPresent() && sql.get().violates(IDEMPOTENCY_KEY_INDEX)) {
+            if (SqlFailure.violates(failure, IDEMPOTENCY_KEY_INDEX)) {
                 return writer.write(command);
             }
-            if (sql.isPresent() && sql.get().violates(REVERSED_AT_MOST_ONCE) && command instanceof ReverseEntry reverse) {
+            if (SqlFailure.violates(failure, REVERSED_AT_MOST_ONCE) && command instanceof ReverseEntry reverse) {
                 return new AlreadyReversed(reverse.reverses());
             }
             throw failure;
