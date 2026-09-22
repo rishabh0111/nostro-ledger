@@ -34,7 +34,7 @@ class ControlPlaneIT extends LedgerIntegrationTest {
         var tenant = newTenant();
         var ledgerKey = newApiKey(tenant, Permission.LEDGER_READ, Permission.LEDGER_WRITE);
 
-        http.perform(post("/control/tenants").header(HttpHeaders.AUTHORIZATION, bearer(ledgerKey))
+        http.perform(post("/v1/control/tenants").header(HttpHeaders.AUTHORIZATION, bearer(ledgerKey))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"name": "never"}
@@ -43,21 +43,21 @@ class ControlPlaneIT extends LedgerIntegrationTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.type").value("https://nostro.dev/problems/forbidden"));
         // Nor its own Tenant's credentials: the Tenant a ledger key acts for is not one it administers.
-        http.perform(post("/control/tenants/{tenant}/api-keys", tenant.value()).header(HttpHeaders.AUTHORIZATION, bearer(ledgerKey))
+        http.perform(post("/v1/control/tenants/{tenant}/api-keys", tenant.value()).header(HttpHeaders.AUTHORIZATION, bearer(ledgerKey))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"label": "never", "permissions": ["LEDGER_READ"]}
                                 """))
                 .andExpect(status().isForbidden());
-        http.perform(delete("/control/tenants/{tenant}/api-keys/{id}", tenant.value(), uuid()).header(HttpHeaders.AUTHORIZATION, bearer(ledgerKey)))
+        http.perform(delete("/v1/control/tenants/{tenant}/api-keys/{id}", tenant.value(), uuid()).header(HttpHeaders.AUTHORIZATION, bearer(ledgerKey)))
                 .andExpect(status().isForbidden());
-        http.perform(post("/control/tenants/{tenant}/staff-users", tenant.value()).header(HttpHeaders.AUTHORIZATION, bearer(ledgerKey))
+        http.perform(post("/v1/control/tenants/{tenant}/staff-users", tenant.value()).header(HttpHeaders.AUTHORIZATION, bearer(ledgerKey))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"username": "never", "password": "correct horse", "permissions": ["LEDGER_READ"]}
                                 """))
                 .andExpect(status().isForbidden());
-        http.perform(delete("/control/tenants/{tenant}/staff-users/{id}", tenant.value(), uuid()).header(HttpHeaders.AUTHORIZATION, bearer(ledgerKey)))
+        http.perform(delete("/v1/control/tenants/{tenant}/staff-users/{id}", tenant.value(), uuid()).header(HttpHeaders.AUTHORIZATION, bearer(ledgerKey)))
                 .andExpect(status().isForbidden());
         assertThat(asOwner().sql("SELECT count(*) FROM tenant WHERE name = 'never'").query(Long.class).single()).isZero();
     }
@@ -65,11 +65,11 @@ class ControlPlaneIT extends LedgerIntegrationTest {
     @Test
     @DisplayName("a control-plane credential cannot reach a ledger endpoint")
     void aControlCredentialCannotReachTheLedger() throws Exception {
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, controlBearer()))
+        http.perform(get("/v1/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, controlBearer()))
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.type").value("https://nostro.dev/problems/forbidden"));
-        http.perform(post("/accounts").header(HttpHeaders.AUTHORIZATION, controlBearer())
+        http.perform(post("/v1/accounts").header(HttpHeaders.AUTHORIZATION, controlBearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"code": "never", "currency": "USD", "constrained": false}
@@ -86,10 +86,10 @@ class ControlPlaneIT extends LedgerIntegrationTest {
         var keyOfB = issueApiKey(b, "integration", "LEDGER_READ", "LEDGER_WRITE").key();
         var accountOfB = openAccount("Bearer " + keyOfB, "cash");
 
-        http.perform(get("/accounts/{id}", accountOfB).header(HttpHeaders.AUTHORIZATION, "Bearer " + keyOfB))
+        http.perform(get("/v1/accounts/{id}", accountOfB).header(HttpHeaders.AUTHORIZATION, "Bearer " + keyOfB))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("cash"));
-        http.perform(get("/accounts/{id}", accountOfB).header(HttpHeaders.AUTHORIZATION, "Bearer " + keyOfA))
+        http.perform(get("/v1/accounts/{id}", accountOfB).header(HttpHeaders.AUTHORIZATION, "Bearer " + keyOfA))
                 .andExpect(problem(ProblemType.UNKNOWN_ACCOUNT));
     }
 
@@ -116,20 +116,20 @@ class ControlPlaneIT extends LedgerIntegrationTest {
         var tenant = createTenant("tenant-" + uuid());
         var issued = issueApiKey(tenant, "short-lived", "LEDGER_READ");
 
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + issued.key()))
+        http.perform(get("/v1/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + issued.key()))
                 .andExpect(status().isNotFound());
-        http.perform(delete("/control/tenants/{tenant}/api-keys/{id}", tenant, issued.id())
+        http.perform(delete("/v1/control/tenants/{tenant}/api-keys/{id}", tenant, issued.id())
                         .header(HttpHeaders.AUTHORIZATION, controlBearer()))
                 .andExpect(status().isNoContent());
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + issued.key()))
+        http.perform(get("/v1/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + issued.key()))
                 .andExpect(status().isUnauthorized());
         // Revoking again changes nothing and is not an error; an unknown key is.
-        http.perform(delete("/control/tenants/{tenant}/api-keys/{id}", tenant, issued.id())
+        http.perform(delete("/v1/control/tenants/{tenant}/api-keys/{id}", tenant, issued.id())
                         .header(HttpHeaders.AUTHORIZATION, controlBearer()))
                 .andExpect(status().isNoContent());
-        http.perform(delete("/control/tenants/{tenant}/api-keys/{id}", tenant, uuid())
+        http.perform(delete("/v1/control/tenants/{tenant}/api-keys/{id}", tenant, uuid())
                         .header(HttpHeaders.AUTHORIZATION, controlBearer()))
-                .andExpect(status().isNotFound());
+                .andExpect(problem(ProblemType.UNKNOWN_CREDENTIAL));
     }
 
     @Test
@@ -137,13 +137,13 @@ class ControlPlaneIT extends LedgerIntegrationTest {
     void controlIsNeverAStoredPermission() throws Exception {
         var tenant = createTenant("tenant-" + uuid());
 
-        http.perform(post("/control/tenants/{tenant}/api-keys", tenant).header(HttpHeaders.AUTHORIZATION, controlBearer())
+        http.perform(post("/v1/control/tenants/{tenant}/api-keys", tenant).header(HttpHeaders.AUTHORIZATION, controlBearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"label": "never", "permissions": ["CONTROL"]}
                                 """))
                 .andExpect(status().isBadRequest());
-        http.perform(post("/control/tenants/{tenant}/api-keys", tenant).header(HttpHeaders.AUTHORIZATION, controlBearer())
+        http.perform(post("/v1/control/tenants/{tenant}/api-keys", tenant).header(HttpHeaders.AUTHORIZATION, controlBearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"label": "never", "permissions": []}
@@ -171,20 +171,20 @@ class ControlPlaneIT extends LedgerIntegrationTest {
         var name = "tenant-" + uuid();
         createTenant(name);
 
-        http.perform(post("/control/tenants").header(HttpHeaders.AUTHORIZATION, controlBearer())
+        http.perform(post("/v1/control/tenants").header(HttpHeaders.AUTHORIZATION, controlBearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(new ControlPlaneController.CreateTenant(name))))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.type").value(ProblemType.TENANT_NAME_TAKEN.uri().toString()));
-        http.perform(post("/control/tenants/{tenant}/api-keys", uuid()).header(HttpHeaders.AUTHORIZATION, controlBearer())
+        http.perform(post("/v1/control/tenants/{tenant}/api-keys", uuid()).header(HttpHeaders.AUTHORIZATION, controlBearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"label": "orphan", "permissions": ["LEDGER_READ"]}
                                 """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.type").value(ProblemType.UNKNOWN_TENANT.uri().toString()));
-        http.perform(post("/control/tenants/{tenant}/api-keys", uuid()).header(HttpHeaders.AUTHORIZATION, controlBearer())
+        http.perform(post("/v1/control/tenants/{tenant}/api-keys", uuid()).header(HttpHeaders.AUTHORIZATION, controlBearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"label": "typo", "permissions": ["LEDGER_ADMIN"]}
@@ -196,7 +196,7 @@ class ControlPlaneIT extends LedgerIntegrationTest {
     @Test
     @DisplayName("a control key that is not the configured one is 401, like any other bad credential")
     void aWrongControlKeyIsUnauthenticated() throws Exception {
-        http.perform(post("/control/tenants").header(HttpHeaders.AUTHORIZATION, "Bearer nc_" + "wrong".repeat(8))
+        http.perform(post("/v1/control/tenants").header(HttpHeaders.AUTHORIZATION, "Bearer nc_" + "wrong".repeat(8))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"name": "never"}
@@ -223,7 +223,7 @@ class ControlPlaneIT extends LedgerIntegrationTest {
         var tenant = createTenant("tenant-" + uuid());
         var username = "staff-" + uuid();
 
-        MvcResult created = http.perform(post("/control/tenants/{tenant}/staff-users", tenant)
+        MvcResult created = http.perform(post("/v1/control/tenants/{tenant}/staff-users", tenant)
                         .header(HttpHeaders.AUTHORIZATION, controlBearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(new ControlPlaneController.CreateStaffUser(
@@ -237,15 +237,15 @@ class ControlPlaneIT extends LedgerIntegrationTest {
 
         var token = login(username, "correct horse");
         var account = openAccount("Bearer " + token, "staff-opened");
-        http.perform(get("/accounts/{id}", account).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        http.perform(get("/v1/accounts/{id}", account).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
 
-        http.perform(delete("/control/tenants/{tenant}/staff-users/{id}", tenant, staffUser)
+        http.perform(delete("/v1/control/tenants/{tenant}/staff-users/{id}", tenant, staffUser)
                         .header(HttpHeaders.AUTHORIZATION, controlBearer()))
                 .andExpect(status().isNoContent());
-        http.perform(get("/accounts/{id}", account).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        http.perform(get("/v1/accounts/{id}", account).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isUnauthorized());
-        http.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+        http.perform(post("/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"username": "%s", "password": "correct horse"}
                                 """.formatted(username)))
@@ -253,7 +253,7 @@ class ControlPlaneIT extends LedgerIntegrationTest {
     }
 
     private UUID createTenant(String name) throws Exception {
-        MvcResult result = http.perform(post("/control/tenants").header(HttpHeaders.AUTHORIZATION, controlBearer())
+        MvcResult result = http.perform(post("/v1/control/tenants").header(HttpHeaders.AUTHORIZATION, controlBearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(new ControlPlaneController.CreateTenant(name))))
                 .andExpect(status().isCreated())
@@ -263,7 +263,7 @@ class ControlPlaneIT extends LedgerIntegrationTest {
     }
 
     private IssuedKey issueApiKey(UUID tenant, String label, String... permissions) throws Exception {
-        MvcResult result = http.perform(post("/control/tenants/{tenant}/api-keys", tenant)
+        MvcResult result = http.perform(post("/v1/control/tenants/{tenant}/api-keys", tenant)
                         .header(HttpHeaders.AUTHORIZATION, controlBearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(new ControlPlaneController.IssueApiKey(label, List.of(permissions)))))

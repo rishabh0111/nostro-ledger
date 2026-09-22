@@ -78,7 +78,7 @@ class AccountHistoryIT extends LedgerIntegrationTest {
         String cursor = null;
         int pages = 0;
         do {
-            var request = get("/accounts/{id}/postings", bank.value()).queryParam("limit", "2");
+            var request = get("/v1/accounts/{id}/postings", bank.value()).queryParam("limit", "2");
             if (cursor != null) {
                 request.queryParam("cursor", cursor);
             }
@@ -110,18 +110,18 @@ class AccountHistoryIT extends LedgerIntegrationTest {
                 .encodeToString("1:00000000000000000001/%s".formatted(uuid()).getBytes());
 
         for (var cursor : List.of("not-base64!", "bm90IGEgY3Vyc29y", foreign)) {
-            http.perform(get("/accounts/{id}/postings", cash.value()).queryParam("cursor", cursor)
+            http.perform(get("/v1/accounts/{id}/postings", cash.value()).queryParam("cursor", cursor)
                             .header(HttpHeaders.AUTHORIZATION, bearer(key)))
                     .andExpect(status().isBadRequest())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
         }
         for (var limit : List.of("0", "201", "-1", "many")) {
-            http.perform(get("/accounts/{id}/postings", cash.value()).queryParam("limit", limit)
+            http.perform(get("/v1/accounts/{id}/postings", cash.value()).queryParam("limit", limit)
                             .header(HttpHeaders.AUTHORIZATION, bearer(key)))
                     .andExpect(status().isBadRequest())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
         }
-        assertThat(history(get("/accounts/{id}/postings", cash.value()).queryParam("limit", "200"), key)
+        assertThat(history(get("/v1/accounts/{id}/postings", cash.value()).queryParam("limit", "200"), key)
                 .get("postings")).isEmpty();
     }
 
@@ -135,7 +135,7 @@ class AccountHistoryIT extends LedgerIntegrationTest {
         var cashOfA = new AccountId(openAccount(keyOfA, "cash"));
         recordEntry(a, cashOfA, new AccountId(openAccount(keyOfA, "bank")), 100);
 
-        http.perform(get("/accounts/{id}/postings", cashOfA.value()).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
+        http.perform(get("/v1/accounts/{id}/postings", cashOfA.value()).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
                 .andExpect(problem(ProblemType.UNKNOWN_ACCOUNT));
         assertThat(history(keyOfA, cashOfA).get("postings")).hasSize(1);
     }
@@ -143,7 +143,7 @@ class AccountHistoryIT extends LedgerIntegrationTest {
     // -- helpers ---------------------------------------------------------------------------------
 
     private JsonNode history(ApiKey key, AccountId account) throws Exception {
-        return history(get("/accounts/{id}/postings", account.value()), key);
+        return history(get("/v1/accounts/{id}/postings", account.value()), key);
     }
 
     private JsonNode history(MockHttpServletRequestBuilder request, ApiKey key) throws Exception {

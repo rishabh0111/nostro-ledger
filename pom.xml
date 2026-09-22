@@ -29,6 +29,9 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
     <spring-boot.version>4.1.1</spring-boot.version>
+    <!-- Not in Boot's BOM on any branch; 3.x is the Boot 4 line, and 3.1.1 carries the swagger-ui
+         security patch (docs/research/spring-boot-4-for-this-design.md, "springdoc"). -->
+    <springdoc.version>3.1.1</springdoc.version>
 
     <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
@@ -45,6 +48,11 @@
         <version>${spring-boot.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.springdoc</groupId>
+        <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        <version>${springdoc.version}</version>
       </dependency>
       <dependency>
         <groupId>io.nostro</groupId>

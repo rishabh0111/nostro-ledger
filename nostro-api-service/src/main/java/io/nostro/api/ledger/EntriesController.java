@@ -2,6 +2,8 @@ package io.nostro.api.ledger;
 
 import io.nostro.api.auth.Permission;
 import io.nostro.api.auth.Requires;
+import io.nostro.api.docs.Refuses;
+import io.nostro.api.problem.ProblemType;
 import io.nostro.domain.AccountId;
 import io.nostro.domain.EntryId;
 import io.nostro.domain.EntryRecorder;
@@ -21,6 +23,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -42,6 +45,9 @@ class EntriesController {
     }
 
     @Requires(Permission.LEDGER_WRITE)
+    @Refuses({ProblemType.UNKNOWN_CURRENCY, ProblemType.UNBALANCED, ProblemType.UNKNOWN_ACCOUNT,
+            ProblemType.CURRENCY_MISMATCH, ProblemType.INSUFFICIENT_BALANCE, ProblemType.IDEMPOTENCY_KEY_REUSED})
+    @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/entries")
     ResponseEntity<EntryResponse> record(@RequestBody RecordEntryRequest request) {
         var postings = Requests.required(request.postings(), "postings").stream().map(EntriesController::posting).toList();
@@ -50,6 +56,9 @@ class EntriesController {
     }
 
     @Requires(Permission.LEDGER_WRITE)
+    @Refuses({ProblemType.UNKNOWN_ENTRY, ProblemType.ALREADY_REVERSED, ProblemType.INSUFFICIENT_BALANCE,
+            ProblemType.IDEMPOTENCY_KEY_REUSED})
+    @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/entries/{id}/reversal")
     ResponseEntity<EntryResponse> reverse(@PathVariable UUID id, @RequestBody ReverseEntryRequest request) {
         var command = new ReverseEntry(idempotencyKey(request.idempotencyKey()), new EntryId(id), request.description());

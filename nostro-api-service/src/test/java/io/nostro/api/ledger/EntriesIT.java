@@ -46,12 +46,12 @@ class EntriesIT extends LedgerIntegrationTest {
         var entry = UUID.fromString(body.get("entry").asString());
         var position = Position.parse(body.get("position").asString()).orElseThrow();
 
-        var balance = json.readTree(http.perform(get("/accounts/{id}/balance", bank).header(HttpHeaders.AUTHORIZATION, bearer(key)))
+        var balance = json.readTree(http.perform(get("/v1/accounts/{id}/balance", bank).header(HttpHeaders.AUTHORIZATION, bearer(key)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         assertThat(balance.get("balance").get("amount").asString()).isEqualTo("15.00");
         assertThat(Position.parse(balance.get("position").asString()).orElseThrow().isAtLeast(position)).isTrue();
 
-        var history = json.readTree(http.perform(get("/accounts/{id}/postings", bank).header(HttpHeaders.AUTHORIZATION, bearer(key)))
+        var history = json.readTree(http.perform(get("/v1/accounts/{id}/postings", bank).header(HttpHeaders.AUTHORIZATION, bearer(key)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         assertThat(history.get("postings")).hasSize(1);
         assertThat(history.get("postings").get(0).get("entry").asString()).isEqualTo(entry.toString());
@@ -87,7 +87,7 @@ class EntriesIT extends LedgerIntegrationTest {
         assertThat(foreign.propertyNames()).containsExactlyInAnyOrderElementsOf(absent.propertyNames());
         assertThat(foreign.get("detail").asString().replace(bankOfB.toString(), "X"))
                 .isEqualTo(absent.get("detail").asString().replaceAll("[0-9a-f-]{36}", "X"));
-        http.perform(get("/accounts/{id}/balance", bankOfB).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
+        http.perform(get("/v1/accounts/{id}/balance", bankOfB).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
                 .andExpect(jsonPath("$.balance.amount").value("0.00"));
     }
 
@@ -115,7 +115,7 @@ class EntriesIT extends LedgerIntegrationTest {
                 .andExpect(problem(ProblemType.INSUFFICIENT_BALANCE))
                 .andExpect(jsonPath("$.detail").value(containsString(wallet.toString())));
 
-        http.perform(get("/accounts/{id}/balance", wallet).header(HttpHeaders.AUTHORIZATION, bearer(key)))
+        http.perform(get("/v1/accounts/{id}/balance", wallet).header(HttpHeaders.AUTHORIZATION, bearer(key)))
                 .andExpect(jsonPath("$.balance.amount").value("10.00"));
     }
 
@@ -136,7 +136,7 @@ class EntriesIT extends LedgerIntegrationTest {
         record(key, entry(idempotencyKey, posting(cash, "-6.00", "USD"), posting(bank, "6.00", "USD")))
                 .andExpect(problem(ProblemType.IDEMPOTENCY_KEY_REUSED))
                 .andExpect(jsonPath("$.detail").value(containsString(idempotencyKey.toString())));
-        http.perform(get("/accounts/{id}/balance", bank).header(HttpHeaders.AUTHORIZATION, bearer(key)))
+        http.perform(get("/v1/accounts/{id}/balance", bank).header(HttpHeaders.AUTHORIZATION, bearer(key)))
                 .andExpect(jsonPath("$.balance.amount").value("5.00"));
     }
 
@@ -204,7 +204,7 @@ class EntriesIT extends LedgerIntegrationTest {
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
         assertThat(reversal.propertyNames()).containsExactly("entry", "position");
         assertThat(reversal.get("entry").asString()).isNotEqualTo(entry);
-        http.perform(get("/accounts/{id}/balance", bank).header(HttpHeaders.AUTHORIZATION, bearer(key)))
+        http.perform(get("/v1/accounts/{id}/balance", bank).header(HttpHeaders.AUTHORIZATION, bearer(key)))
                 .andExpect(jsonPath("$.balance.amount").value("0.00"));
 
         var again = json.readTree(reverse(key, entry, reversalKey)
@@ -227,7 +227,7 @@ class EntriesIT extends LedgerIntegrationTest {
 
         reverse(keyOfA, entryOfB, uuid()).andExpect(problem(ProblemType.UNKNOWN_ENTRY));
         reverse(keyOfA, uuid().toString(), uuid()).andExpect(problem(ProblemType.UNKNOWN_ENTRY));
-        http.perform(get("/accounts/{id}/balance", bankOfB).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
+        http.perform(get("/v1/accounts/{id}/balance", bankOfB).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
                 .andExpect(jsonPath("$.balance.amount").value("1.00"));
     }
 
@@ -278,9 +278,9 @@ class EntriesIT extends LedgerIntegrationTest {
     void frameworkRefusalsCarryTheMalformedType() throws Exception {
         var key = newApiKey(newTenant(), Permission.LEDGER_READ, Permission.LEDGER_WRITE);
 
-        http.perform(get("/accounts/{id}", "not-a-uuid").header(HttpHeaders.AUTHORIZATION, bearer(key)))
+        http.perform(get("/v1/accounts/{id}", "not-a-uuid").header(HttpHeaders.AUTHORIZATION, bearer(key)))
                 .andExpect(problem(ProblemType.MALFORMED));
-        http.perform(post("/accounts").header(HttpHeaders.AUTHORIZATION, bearer(key))
+        http.perform(post("/v1/accounts").header(HttpHeaders.AUTHORIZATION, bearer(key))
                         .contentType(MediaType.APPLICATION_JSON).content("{not json"))
                 .andExpect(problem(ProblemType.MALFORMED));
     }
@@ -288,17 +288,17 @@ class EntriesIT extends LedgerIntegrationTest {
     // -- helpers ---------------------------------------------------------------------------------
 
     private ResultActions record(ApiKey key, String body) throws Exception {
-        return http.perform(json(post("/entries"), key, body));
+        return http.perform(json(post("/v1/entries"), key, body));
     }
 
     private ResultActions reverse(ApiKey key, String entry, UUID idempotencyKey) throws Exception {
-        return http.perform(json(post("/entries/{id}/reversal", entry), key, """
+        return http.perform(json(post("/v1/entries/{id}/reversal", entry), key, """
                 {"idempotencyKey": "%s", "description": "undo"}
                 """.formatted(idempotencyKey)));
     }
 
     private ResultActions open(ApiKey key, String body) throws Exception {
-        return http.perform(json(post("/accounts"), key, body));
+        return http.perform(json(post("/v1/accounts"), key, body));
     }
 
     private UUID openAccount(ApiKey key, String code, String currency, boolean constrained) throws Exception {

@@ -1,5 +1,6 @@
 package io.nostro.api.control;
 
+import io.nostro.api.ApiVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -34,7 +35,7 @@ class DemoTenantsRunner implements ApplicationRunner {
             seeded.key().ifPresentOrElse(
                     key -> banner.append("  Authorization: Bearer ").append(key.value()).append('\n'),
                     () -> banner.append("  already seeded; its key was printed when it was issued. Issue another with the control key:\n")
-                            .append("  POST /control/tenants/").append(seeded.tenant().value()).append("/api-keys\n"));
+                            .append("  POST " + ApiVersion.V1 + "/control/tenants/").append(seeded.tenant().value()).append("/api-keys\n"));
         }
         banner.append('\n')
                 .append("Each key reads and writes its own Tenant's ledger and sees nothing of the other's.\n")

@@ -1,5 +1,6 @@
 package io.nostro.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -155,14 +156,16 @@ public abstract class LedgerIntegrationTest {
 
     /** Opens an Account over HTTP with the {@code Authorization} value given, and returns its id. */
     protected UUID openAccount(String authorization, String code) throws Exception {
-        MvcResult result = http.perform(post("/accounts").header(HttpHeaders.AUTHORIZATION, authorization)
+        MvcResult result = http.perform(post("/v1/accounts").header(HttpHeaders.AUTHORIZATION, authorization)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"code": "%s", "currency": "USD", "constrained": false}
                                 """.formatted(code)))
                 .andExpect(status().isCreated())
                 .andReturn();
-        return UUID.fromString(json.readTree(result.getResponse().getContentAsString()).get("id").asString());
+        var id = UUID.fromString(json.readTree(result.getResponse().getContentAsString()).get("id").asString());
+        assertThat(result.getResponse().getHeader(HttpHeaders.LOCATION)).isEqualTo("/v1/accounts/" + id);
+        return id;
     }
 
     protected UUID openAccount(ApiKey key, String code) throws Exception {
@@ -190,7 +193,7 @@ public abstract class LedgerIntegrationTest {
 
     /** Logs a staff user in over HTTP and returns the token issued. */
     protected String login(String username, String password) throws Exception {
-        MvcResult result = http.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+        MvcResult result = http.perform(post("/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"username": "%s", "password": "%s"}
                                 """.formatted(username, password)))

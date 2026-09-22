@@ -1,5 +1,7 @@
 package io.nostro.api.auth;
 
+import io.nostro.api.docs.Refuses;
+import io.nostro.api.problem.ProblemType;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
@@ -11,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Where staff turn a password into a short-lived token (ADR-0006). */
 @RestController
-class LoginController {
+public class LoginController {
 
     /** A hash to compare against when the username is unknown, so that lookups take the same time either way. */
     private final String unknownUserHash;
@@ -27,8 +29,11 @@ class LoginController {
         this.unknownUserHash = passwords.encode(UUID.randomUUID().toString());
     }
 
+    public static final String PATH = "/auth/login";
+
     @Public
-    @PostMapping(SecurityConfiguration.LOGIN_PATH)
+    @Refuses(ProblemType.UNAUTHENTICATED)
+    @PostMapping(PATH)
     ResponseEntity<Token> login(@RequestBody Login login) {
         var user = credentials.staffUser(login.username());
         boolean matches = passwords.matches(login.password(), user.map(Credentials.StaffUser::passwordHash).orElse(unknownUserHash));

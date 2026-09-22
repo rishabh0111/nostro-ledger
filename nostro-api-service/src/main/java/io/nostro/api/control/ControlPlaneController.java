@@ -1,7 +1,9 @@
 package io.nostro.api.control;
 
+import io.nostro.api.ApiVersion;
 import io.nostro.api.auth.Permission;
 import io.nostro.api.auth.Requires;
+import io.nostro.api.docs.Refuses;
 import io.nostro.api.problem.ProblemType;
 import io.nostro.domain.TenantId;
 import java.net.URI;
@@ -9,11 +11,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -33,11 +37,13 @@ class ControlPlaneController {
     }
 
     @Requires(Permission.CONTROL)
+    @Refuses(ProblemType.TENANT_NAME_TAKEN)
+    @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/control/tenants")
     ResponseEntity<TenantResponse> createTenant(@RequestBody CreateTenant request) {
         return switch (controlPlane.createTenant(request.name())) {
             case ControlPlane.TenantOutcome.Created created -> ResponseEntity
-                    .created(URI.create("/control/tenants/" + created.tenant().id().value()))
+                    .created(URI.create(ApiVersion.V1 + "/control/tenants/" + created.tenant().id().value()))
                     .body(TenantResponse.of(created.tenant()));
             case ControlPlane.TenantOutcome.NameTaken taken ->
                     throw ProblemType.TENANT_NAME_TAKEN.exception("a tenant named '" + taken.name() + "' exists");
@@ -48,11 +54,13 @@ class ControlPlaneController {
 
     /** Issues an API key. The response carries the key; nothing else ever will. */
     @Requires(Permission.CONTROL)
+    @Refuses({ProblemType.UNKNOWN_TENANT, ProblemType.UNKNOWN_PERMISSION})
+    @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/control/tenants/{tenant}/api-keys")
     ResponseEntity<IssuedApiKeyResponse> issueApiKey(@PathVariable UUID tenant, @RequestBody IssueApiKey request) {
         return switch (controlPlane.issueApiKey(new TenantId(tenant), request.label(), permissions(request.permissions()))) {
             case ControlPlane.IssueOutcome.Issued issued -> ResponseEntity
-                    .created(URI.create("/control/tenants/" + tenant + "/api-keys/" + issued.apiKey().id()))
+                    .created(URI.create(ApiVersion.V1 + "/control/tenants/" + tenant + "/api-keys/" + issued.apiKey().id()))
                     .body(IssuedApiKeyResponse.of(issued.apiKey()));
             case ControlPlane.IssueOutcome.UnknownTenant unknown ->
                     throw ProblemType.UNKNOWN_TENANT.exception("tenant " + unknown.tenant() + " does not exist");
@@ -63,19 +71,23 @@ class ControlPlaneController {
 
     /** Revokes the key. The row stays, marked; from the caller's side the credential is gone. */
     @Requires(Permission.CONTROL)
+    @Refuses(ProblemType.UNKNOWN_CREDENTIAL)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     @DeleteMapping("/control/tenants/{tenant}/api-keys/{id}")
     ResponseEntity<Void> revokeApiKey(@PathVariable UUID tenant, @PathVariable UUID id) {
         return revoked(controlPlane.revokeApiKey(new TenantId(tenant), id));
     }
 
     @Requires(Permission.CONTROL)
+    @Refuses({ProblemType.UNKNOWN_TENANT, ProblemType.STAFF_USERNAME_TAKEN, ProblemType.UNKNOWN_PERMISSION})
+    @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/control/tenants/{tenant}/staff-users")
     ResponseEntity<StaffUserResponse> createStaffUser(@PathVariable UUID tenant, @RequestBody CreateStaffUser request) {
         var outcome = controlPlane.createStaffUser(
                 new TenantId(tenant), request.username(), request.password(), permissions(request.permissions()));
         return switch (outcome) {
             case ControlPlane.StaffOutcome.Created created -> ResponseEntity
-                    .created(URI.create("/control/tenants/" + tenant + "/staff-users/" + created.staffUser().id()))
+                    .created(URI.create(ApiVersion.V1 + "/control/tenants/" + tenant + "/staff-users/" + created.staffUser().id()))
                     .body(StaffUserResponse.of(created.staffUser()));
             case ControlPlane.StaffOutcome.UnknownTenant unknown ->
                     throw ProblemType.UNKNOWN_TENANT.exception("tenant " + unknown.tenant() + " does not exist");
@@ -87,6 +99,8 @@ class ControlPlaneController {
     }
 
     @Requires(Permission.CONTROL)
+    @Refuses(ProblemType.UNKNOWN_CREDENTIAL)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     @DeleteMapping("/control/tenants/{tenant}/staff-users/{id}")
     ResponseEntity<Void> revokeStaffUser(@PathVariable UUID tenant, @PathVariable UUID id) {
         return revoked(controlPlane.revokeStaffUser(new TenantId(tenant), id));
@@ -95,7 +109,8 @@ class ControlPlaneController {
     private static ResponseEntity<Void> revoked(ControlPlane.RevokeOutcome outcome) {
         return switch (outcome) {
             case ControlPlane.RevokeOutcome.Revoked revoked -> ResponseEntity.noContent().build();
-            case ControlPlane.RevokeOutcome.Unknown unknown -> ResponseEntity.notFound().build();
+            case ControlPlane.RevokeOutcome.Unknown unknown -> throw ProblemType.UNKNOWN_CREDENTIAL.exception(
+                    "credential " + unknown.id() + " is not one the tenant holds");
         };
     }
 

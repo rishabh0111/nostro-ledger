@@ -1,7 +1,9 @@
 package io.nostro.api.ledger;
 
+import io.nostro.api.ApiVersion;
 import io.nostro.api.auth.Permission;
 import io.nostro.api.auth.Requires;
+import io.nostro.api.docs.Refuses;
 import io.nostro.api.problem.ProblemType;
 import io.nostro.domain.Account;
 import io.nostro.domain.AccountId;
@@ -11,11 +13,13 @@ import io.nostro.persistence.ledger.Accounts.OpenOutcome.Opened;
 import java.net.URI;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -33,6 +37,8 @@ class AccountsController {
     }
 
     @Requires(Permission.LEDGER_WRITE)
+    @Refuses({ProblemType.UNKNOWN_CURRENCY, ProblemType.ACCOUNT_CODE_TAKEN})
+    @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/accounts")
     ResponseEntity<AccountResponse> open(@RequestBody OpenAccount request) {
         var currency = Requests.currency(Requests.required(request.currency(), "currency"));
@@ -40,7 +46,7 @@ class AccountsController {
                 new Account(AccountId.random(), Requests.required(request.code(), "code"), currency, request.constrained()));
         return switch (accounts.open(account)) {
             case Opened opened -> ResponseEntity
-                    .created(URI.create("/accounts/" + opened.account().id()))
+                    .created(URI.create(ApiVersion.V1 + "/accounts/" + opened.account().id()))
                     .body(AccountResponse.of(opened.account()));
             case CodeTaken taken -> throw ProblemType.ACCOUNT_CODE_TAKEN.exception(
                     "an account with code '" + taken.code() + "' already exists");
@@ -48,6 +54,7 @@ class AccountsController {
     }
 
     @Requires(Permission.LEDGER_READ)
+    @Refuses(ProblemType.UNKNOWN_ACCOUNT)
     @GetMapping("/accounts/{id}")
     ResponseEntity<AccountResponse> find(@PathVariable UUID id) {
         return accounts.find(new AccountId(id))

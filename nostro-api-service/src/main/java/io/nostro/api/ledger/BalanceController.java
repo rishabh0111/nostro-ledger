@@ -2,6 +2,7 @@ package io.nostro.api.ledger;
 
 import io.nostro.api.auth.Permission;
 import io.nostro.api.auth.Requires;
+import io.nostro.api.docs.Refuses;
 import io.nostro.api.problem.ProblemType;
 import io.nostro.domain.AccountId;
 import io.nostro.domain.Balance;
@@ -38,6 +39,7 @@ class BalanceController {
     }
 
     @Requires(Permission.LEDGER_READ)
+    @Refuses(ProblemType.UNKNOWN_ACCOUNT)
     @GetMapping("/accounts/{id}/balance")
     ResponseEntity<BalanceResponse> read(@PathVariable UUID id, @RequestParam(required = false) @Nullable String minPosition) {
         Optional<Position> minimum = minPosition == null

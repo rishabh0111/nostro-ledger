@@ -53,7 +53,7 @@ class BalanceIT extends LedgerIntegrationTest {
         var bank = new AccountId(openAccount(key, "bank"));
         var written = recordEntry(tenant, cash, bank, 700);
 
-        var result = http.perform(get("/accounts/{id}/balance", bank.value())
+        var result = http.perform(get("/v1/accounts/{id}/balance", bank.value())
                         .queryParam("minPosition", written.position().token())
                         .header(HttpHeaders.AUTHORIZATION, bearer(key)))
                 .andExpect(status().isOk())
@@ -74,7 +74,7 @@ class BalanceIT extends LedgerIntegrationTest {
         var otherInstallation = new Position(written.position().installation() + 1, written.position().xid8()).token();
 
         for (var minimum : List.of("not-a-position", "1:2", otherInstallation)) {
-            http.perform(get("/accounts/{id}/balance", cash.value())
+            http.perform(get("/v1/accounts/{id}/balance", cash.value())
                             .queryParam("minPosition", minimum)
                             .header(HttpHeaders.AUTHORIZATION, bearer(key)))
                     .andExpect(status().isBadRequest())
@@ -108,7 +108,7 @@ class BalanceIT extends LedgerIntegrationTest {
         recordEntry(a, cashOfA, new AccountId(openAccount(keyOfA, "bank")), 100);
 
         for (var id : List.of(cashOfA.value(), uuid())) {
-            http.perform(get("/accounts/{id}/balance", id).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
+            http.perform(get("/v1/accounts/{id}/balance", id).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
                     .andExpect(problem(ProblemType.UNKNOWN_ACCOUNT));
         }
         assertThat(balance(keyOfA, cashOfA).get("balance").get("amount").asString()).isEqualTo("-1.00");
@@ -117,7 +117,7 @@ class BalanceIT extends LedgerIntegrationTest {
     // -- helpers ---------------------------------------------------------------------------------
 
     private JsonNode balance(ApiKey key, AccountId account) throws Exception {
-        var result = http.perform(get("/accounts/{id}/balance", account.value()).header(HttpHeaders.AUTHORIZATION, bearer(key)))
+        var result = http.perform(get("/v1/accounts/{id}/balance", account.value()).header(HttpHeaders.AUTHORIZATION, bearer(key)))
                 .andExpect(status().isOk())
                 .andReturn();
         return json.readTree(result.getResponse().getContentAsString());

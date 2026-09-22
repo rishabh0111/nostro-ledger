@@ -44,18 +44,18 @@ class AuthenticationIT extends LedgerIntegrationTest {
         var keyOfB = newApiKey(b, Permission.LEDGER_READ, Permission.LEDGER_WRITE);
         var accountOfB = openAccount(keyOfB, "cash");
 
-        http.perform(get("/accounts/{id}", accountOfB).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
+        http.perform(get("/v1/accounts/{id}", accountOfB).header(HttpHeaders.AUTHORIZATION, bearer(keyOfB)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(accountOfB.toString()))
                 .andExpect(jsonPath("$.code").value("cash"));
-        http.perform(get("/accounts/{id}", accountOfB).header(HttpHeaders.AUTHORIZATION, bearer(keyOfA)))
+        http.perform(get("/v1/accounts/{id}", accountOfB).header(HttpHeaders.AUTHORIZATION, bearer(keyOfA)))
                 .andExpect(problem(ProblemType.UNKNOWN_ACCOUNT));
     }
 
     @Test
     @DisplayName("no credential is 401, whatever is asked for")
     void noCredentialIsUnauthenticated() throws Exception {
-        http.perform(get("/accounts/{id}", uuid()))
+        http.perform(get("/v1/accounts/{id}", uuid()))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, "Bearer"))
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
@@ -70,11 +70,11 @@ class AuthenticationIT extends LedgerIntegrationTest {
         var revoked = newApiKey(tenant, Permission.LEDGER_READ);
         revokeApiKey(revoked);
 
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, bearer(ApiKey.generate())))
+        http.perform(get("/v1/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, bearer(ApiKey.generate())))
                 .andExpect(status().isUnauthorized());
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer not-a-credential"))
+        http.perform(get("/v1/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer not-a-credential"))
                 .andExpect(status().isUnauthorized());
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, bearer(revoked)))
+        http.perform(get("/v1/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, bearer(revoked)))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -84,7 +84,7 @@ class AuthenticationIT extends LedgerIntegrationTest {
         var tenant = newTenant();
         var readOnly = newApiKey(tenant, Permission.LEDGER_READ);
 
-        http.perform(post("/accounts").header(HttpHeaders.AUTHORIZATION, bearer(readOnly))
+        http.perform(post("/v1/accounts").header(HttpHeaders.AUTHORIZATION, bearer(readOnly))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"code": "never", "currency": "USD", "constrained": false}
@@ -106,7 +106,7 @@ class AuthenticationIT extends LedgerIntegrationTest {
         var token = login(username, "correct horse");
         var account = openAccount("Bearer " + token, "staff-opened");
 
-        http.perform(get("/accounts/{id}", account).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        http.perform(get("/v1/accounts/{id}", account).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("staff-opened"));
     }
@@ -118,10 +118,10 @@ class AuthenticationIT extends LedgerIntegrationTest {
         var username = "staff-" + uuid();
         newStaffUser(tenant, username, "correct horse", Permission.LEDGER_READ);
 
-        http.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+        http.perform(post("/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(new LoginController.Login(username, "battery staple"))))
                 .andExpect(status().isUnauthorized());
-        http.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+        http.perform(post("/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(new LoginController.Login("nobody-" + uuid(), "correct horse"))))
                 .andExpect(status().isUnauthorized());
     }
@@ -139,14 +139,14 @@ class AuthenticationIT extends LedgerIntegrationTest {
         var forged = new StaffTokens(new AuthProperties("another-secret-that-is-also-32-bytes-long", properties.jwtTtl(), properties.controlKey()),
                 Clock.systemUTC()).issue(user).token();
 
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + expired))
+        http.perform(get("/v1/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + expired))
                 .andExpect(status().isUnauthorized());
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + forged))
+        http.perform(get("/v1/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + forged))
                 .andExpect(status().isUnauthorized());
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        http.perform(get("/v1/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
         revokeStaffUser(user);
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        http.perform(get("/v1/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -156,10 +156,10 @@ class AuthenticationIT extends LedgerIntegrationTest {
         var tenant = newTenant();
         var key = newApiKey(tenant, Permission.LEDGER_READ);
 
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, bearer(key)))
+        http.perform(get("/v1/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, bearer(key)))
                 .andExpect(status().isNotFound());
         assertThat(TenantContext.current()).as("after a served request").isEmpty();
-        http.perform(get("/accounts/{id}", "not-a-uuid").header(HttpHeaders.AUTHORIZATION, bearer(key)))
+        http.perform(get("/v1/accounts/{id}", "not-a-uuid").header(HttpHeaders.AUTHORIZATION, bearer(key)))
                 .andExpect(status().isBadRequest());
         assertThat(TenantContext.current()).as("after a request that failed inside the handler").isEmpty();
     }
@@ -181,7 +181,7 @@ class AuthenticationIT extends LedgerIntegrationTest {
     void frameworkRefusalsAreProblemDetails() throws Exception {
         var key = newApiKey(newTenant(), Permission.LEDGER_READ);
 
-        http.perform(get("/accounts/{id}", "not-a-uuid").header(HttpHeaders.AUTHORIZATION, bearer(key)))
+        http.perform(get("/v1/accounts/{id}", "not-a-uuid").header(HttpHeaders.AUTHORIZATION, bearer(key)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(400));

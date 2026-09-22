@@ -33,10 +33,10 @@ class DemoTenantsIT extends LedgerIntegrationTest {
         var beta = seeded.get(1).key().orElseThrow();
 
         var accountOfAlpha = openAccount(alpha, "cash");
-        http.perform(get("/accounts/{id}", accountOfAlpha).header(HttpHeaders.AUTHORIZATION, bearer(alpha)))
+        http.perform(get("/v1/accounts/{id}", accountOfAlpha).header(HttpHeaders.AUTHORIZATION, bearer(alpha)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("cash"));
-        http.perform(get("/accounts/{id}", accountOfAlpha).header(HttpHeaders.AUTHORIZATION, bearer(beta)))
+        http.perform(get("/v1/accounts/{id}", accountOfAlpha).header(HttpHeaders.AUTHORIZATION, bearer(beta)))
                 .andExpect(status().isNotFound());
 
         var again = demoTenants.seed();

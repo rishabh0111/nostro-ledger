@@ -26,8 +26,8 @@ spring:
       app_password: ${NOSTRO_APP_PASSWORD}
       control_password: ${NOSTRO_CONTROL_PASSWORD}
 
-  # Every refusal is application/problem+json (ADR-0014), including the framework's own; the
-  # error model maps the domain's outcomes.
+  # Every refusal is application/problem+json (ADR-0014), including the framework's own;
+  # ProblemAdvice types them and LedgerRefusals maps the domain's outcomes.
   mvc:
     problemdetails:
       enabled: true
@@ -65,3 +65,9 @@ nostro:
       username: nostro_control
       password: ${NOSTRO_CONTROL_PASSWORD}
     seed-demo-tenants: ${NOSTRO_SEED_DEMO_TENANTS:false}
+
+# The OpenAPI document, generated from the code and never hand-maintained: /v3/api-docs,
+# its YAML form at /v3/api-docs.yaml, and the UI at /swagger-ui.html.
+springdoc:
+  default-produces-media-type: application/json
+  writer-with-order-by-keys: true

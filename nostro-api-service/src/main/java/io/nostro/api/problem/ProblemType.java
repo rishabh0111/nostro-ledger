@@ -47,6 +47,8 @@ public enum ProblemType {
 
     TENANT_NAME_TAKEN("tenant-name-taken", HttpStatus.CONFLICT, "Tenant name taken"),
     UNKNOWN_TENANT("unknown-tenant", HttpStatus.NOT_FOUND, "Unknown tenant"),
+    /** A credential to revoke that the Tenant named does not have: an API key or a staff user. */
+    UNKNOWN_CREDENTIAL("unknown-credential", HttpStatus.NOT_FOUND, "Unknown credential"),
     STAFF_USERNAME_TAKEN("staff-username-taken", HttpStatus.CONFLICT, "Staff username taken"),
     UNKNOWN_PERMISSION("unknown-permission", HttpStatus.BAD_REQUEST, "Unknown permission");
 

@@ -1,6 +1,7 @@
 package io.nostro.api.auth;
 
 import jakarta.servlet.DispatcherType;
+import io.nostro.api.ApiVersion;
 import java.time.Clock;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -35,7 +36,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @EnableConfigurationProperties(AuthProperties.class)
 class SecurityConfiguration implements WebMvcConfigurer {
 
-    static final String LOGIN_PATH = "/auth/login";
+    static final String LOGIN_PATH = ApiVersion.V1 + LoginController.PATH;
 
     private final RequiredPermissions requiredPermissions;
 
@@ -56,6 +57,8 @@ class SecurityConfiguration implements WebMvcConfigurer {
                 .authorizeHttpRequests(authorize -> authorize
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, LOGIN_PATH).permitAll()
+                        // The generated document and its UI: what the API is, not what it holds.
+                        .requestMatchers(HttpMethod.GET, "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(problems)
