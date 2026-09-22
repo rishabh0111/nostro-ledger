@@ -1,5 +1,7 @@
 # Nostro
 
+[![CI](https://github.com/rishabh0111/nostro-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/rishabh0111/nostro-lab/actions/workflows/ci.yml)
+
 A multitenant double-entry ledger, exposed as an HTTP API. Tenants record movements of money; the
 system's job is to make it structurally impossible to record one that does not balance, to lose one,
 to apply one twice, or to let one tenant's money touch another's. Every one of those guarantees is
@@ -38,6 +40,12 @@ goes from there to a refused cross-tenant write in six requests.
 Run them yourself with `./mvnw verify` (Docker required; the suite starts one Postgres container and
 one Spring context and runs everything against them — see
 [ADR-0012](docs/adr/0012-test-seams.md)).
+
+Every push runs them against a real Postgres on GitHub Actions, and the run's summary is this table
+again, ticked from the test reports. The table is not maintained by hand on either side: a claim
+whose proof is renamed, removed or skipped fails the build rather than quietly going unproved
+([`ci.yml`](.github/workflows/ci.yml),
+[`ReadmeClaimsTest`](nostro-api-service/src/test/java/io/nostro/api/docs/ReadmeClaimsTest.java)).
 
 ## Walkthrough: from the console to a refused cross-tenant write
 

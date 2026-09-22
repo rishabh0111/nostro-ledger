@@ -1,0 +1,111 @@
+# The pipeline page is meant to be read as evidence, so the jobs are named as the claims they
+# settle rather than as the commands they run, and the integration job ends by republishing the
+# README's invariant table ticked from the test reports.
+#
+# Standard runners only. A larger runner is the one documented way a public repository gets billed
+# (docs/research/ci-and-testcontainers-budget.md section 1), so `runs-on` never says anything but
+# `ubuntu-latest`.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push supersedes the first rather than queueing behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Two jobs in parallel, not one and not five: cheap failures come back in minutes without waiting
+  # on containers, and sharding further would pay the image pull and the Spring contexts per shard
+  # (research note, section 7).
+  domain:
+    name: An unbalanced Entry is refused, and an unmapped refusal will not compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          # Both jobs configure this identically so they share one ~/.m2 cache entry.
+          cache: maven
+
+      - name: Every module compiles, and the rules that need no database hold
+        run: ./mvnw -B --no-transfer-progress verify -DskipITs
+
+      # The summary step is what turns the other job's reports into the claims, so it is tested too.
+      - name: The script that ticks the claims is itself tested
+        run: python3 -m unittest discover -s .github/scripts
+
+  invariants:
+    name: A cross-tenant reference is refused, and a Constrained Account never goes negative
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # The runner ships PostgreSQL 16, disabled by default, and it stays that way: Testcontainers
+      # starts the image LedgerPostgres names -- the tag docker compose uses -- so CI exercises the
+      # database a developer gets locally rather than a differently configured one (research note,
+      # section 2). One singleton container for the suite; withReuse is documented as unsuited to CI.
+      #
+      # The context cache is the cost that grows without bound as the suite grows (ADR-0012, research
+      # note section 5), so CI logs every context it builds. When the suite gets slow, the answer is
+      # in that output.
+      # bash, not the default shell, for pipefail: without it the pipe into tee would swallow a
+      # failing suite.
+      - name: The whole suite, against one Postgres and one Spring context
+        shell: bash
+        run: >-
+          ./mvnw -B --no-transfer-progress verify
+          -Dlogging.level.org.springframework.test.context.cache=DEBUG
+          | tee suite.log
+
+      # The claim the job name makes about itself: the suite built one context, not one per test
+      # class. `size` is the number of distinct context configurations and `missCount` the number
+      # actually built; both should read 1.
+      - name: One Spring context for the whole suite
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          {
+            echo '### The Spring context cache at the end of the suite'
+            echo '```'
+            grep -o 'DefaultContextCache@.*\]' suite.log | tail -1 || echo 'no cache statistics logged'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Runs even when the suite failed, so the summary says which claim broke -- but not when the
+      # run was cancelled by a newer push, where there is nothing to report.
+      - name: The claims, ticked from the reports
+        if: ${{ !cancelled() }}
+        run: |
+          python3 .github/scripts/claim-summary.py \
+            nostro-api-service/target/claims.tsv \
+            */target/surefire-reports */target/failsafe-reports \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: The reports themselves
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '*/target/*-reports/'
+          if-no-files-found: error
