@@ -1,5 +1,7 @@
 package io.nostro.api;
 
+import io.nostro.api.auth.ApiKey;
+import io.nostro.api.auth.Permission;
 import io.nostro.domain.TenantId;
 import io.nostro.persistence.tenant.TenantContext;
 import io.nostro.testsupport.LedgerPostgres;
@@ -9,8 +11,10 @@ import java.util.function.Supplier;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -26,8 +30,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @SpringBootTest(properties = {
         "NOSTRO_APP_PASSWORD=app-secret",
         "NOSTRO_CONTROL_PASSWORD=control-secret",
+        "NOSTRO_JWT_SECRET=a-test-only-signing-secret-of-at-least-32-bytes",
         "spring.jpa.properties.hibernate.generate_statistics=true"
 })
+@AutoConfigureMockMvc
 public abstract class LedgerIntegrationTest {
 
     static final PostgreSQLContainer POSTGRES = LedgerPostgres.instance();
@@ -59,6 +65,36 @@ public abstract class LedgerIntegrationTest {
                 .param(id.value()).param("tenant-" + id.value())
                 .update();
         return id;
+    }
+
+    /** Issues an API key for the Tenant directly, as the owner, and returns the key itself. The control plane arrives later. */
+    protected ApiKey newApiKey(TenantId tenant, Permission... permissions) {
+        var key = ApiKey.generate();
+        asOwner().sql("INSERT INTO api_key (tenant_id, id, key_hash, label, permissions) VALUES (?, ?, ?, ?, ?)")
+                .params(tenant.value(), uuid(), key.hash(), "test", names(permissions))
+                .update();
+        return key;
+    }
+
+    /** Creates a staff user directly, as the owner, with the password given; the hash is BCrypt, as the application checks. */
+    protected UUID newStaffUser(TenantId tenant, String username, String password, Permission... permissions) {
+        var id = uuid();
+        asOwner().sql("INSERT INTO staff_user (tenant_id, id, username, password_hash, permissions) VALUES (?, ?, ?, ?, ?)")
+                .params(tenant.value(), id, username, new BCryptPasswordEncoder(4).encode(password), names(permissions))
+                .update();
+        return id;
+    }
+
+    protected void revokeApiKey(ApiKey key) {
+        asOwner().sql("UPDATE api_key SET revoked_at = now() WHERE key_hash = ?").param(key.hash()).update();
+    }
+
+    protected void revokeStaffUser(UUID id) {
+        asOwner().sql("UPDATE staff_user SET revoked_at = now() WHERE id = ?").param(id).update();
+    }
+
+    private static String[] names(Permission... permissions) {
+        return java.util.Arrays.stream(permissions).map(Enum::name).toArray(String[]::new);
     }
 
     /** Runs work in one transaction as the request-path role, acting for the Tenant given. */

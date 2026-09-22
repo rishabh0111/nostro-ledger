@@ -26,6 +26,12 @@ spring:
       app_password: ${NOSTRO_APP_PASSWORD}
       control_password: ${NOSTRO_CONTROL_PASSWORD}
 
+  # Every refusal is application/problem+json (ADR-0014), including the framework's own; the
+  # error model maps the domain's outcomes.
+  mvc:
+    problemdetails:
+      enabled: true
+
   jpa:
     # Off: a lazy load during response serialisation would run after COMMIT, on a connection with
     # no Tenant, and under fail-closed policies return an empty collection rather than an error.
@@ -39,3 +45,11 @@ spring:
       hibernate.jdbc.batch_size: 50
       hibernate.order_inserts: true
       hibernate.order_updates: true
+
+# Staff tokens are HS256-signed with a secret that lives only in the environment (ADR-0006).
+# Short-lived: a token cannot be revoked, the staff user behind it can, and the row is re-read on
+# every request.
+nostro:
+  auth:
+    jwt-secret: ${NOSTRO_JWT_SECRET}
+    jwt-ttl: 15m
