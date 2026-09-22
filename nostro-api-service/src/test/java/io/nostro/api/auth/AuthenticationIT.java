@@ -169,6 +169,7 @@ class AuthenticationIT extends LedgerIntegrationTest {
     void theStartupCheckSawEveryEndpoint() {
         assertThat(requiredPermissions.verifiedEndpoints())
                 .contains("AccountsController.open", "AccountsController.find", "LoginController.login",
+                        "BalanceController.read", "AccountHistoryController.newestFirst",
                         "ControlPlaneController.createTenant", "ControlPlaneController.issueApiKey",
                         "ControlPlaneController.revokeApiKey", "ControlPlaneController.createStaffUser",
                         "ControlPlaneController.revokeStaffUser");

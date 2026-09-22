@@ -5,10 +5,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import io.nostro.api.auth.ApiKey;
 import io.nostro.api.auth.Permission;
+import io.nostro.domain.AccountId;
+import io.nostro.domain.Currency;
+import io.nostro.domain.EntryRecorder;
+import io.nostro.domain.IdempotencyKey;
+import io.nostro.domain.Money;
+import io.nostro.domain.Posting;
+import io.nostro.domain.RecordEntry;
+import io.nostro.domain.RecordOutcome.Recorded;
 import io.nostro.domain.TenantId;
 import io.nostro.persistence.tenant.TenantContext;
 import io.nostro.testsupport.LedgerPostgres;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
@@ -69,6 +78,9 @@ public abstract class LedgerIntegrationTest {
 
     @Autowired
     protected JsonMapper json;
+
+    @Autowired
+    protected EntryRecorder recorder;
 
     /** The owner: the container's superuser, which bypasses every policy. For fixtures only. */
     protected JdbcClient asOwner() {
@@ -151,6 +163,25 @@ public abstract class LedgerIntegrationTest {
 
     protected UUID openAccount(ApiKey key, String code) throws Exception {
         return openAccount(bearer(key), code);
+    }
+
+    /**
+     * Records an Entry moving {@code minor} USD cents from one Account to another, through the real
+     * recorder, acting for the Tenant: a fixture for the read tests, which need history to read.
+     * Fails the test if the Entry is refused.
+     */
+    protected Recorded recordEntry(TenantId tenant, AccountId from, AccountId to, long minor) {
+        var usd = Currency.of("USD");
+        return recordEntry(tenant, List.of(new Posting(from, Money.ofMinor(-minor, usd)), new Posting(to, Money.ofMinor(minor, usd))));
+    }
+
+    protected Recorded recordEntry(TenantId tenant, List<Posting> postings) {
+        var command = new RecordEntry(new IdempotencyKey(UUID.randomUUID().toString()), postings, null);
+        var outcome = TenantContext.runAs(tenant, () -> recorder.record(command));
+        if (!(outcome instanceof Recorded recorded)) {
+            throw new AssertionError("expected the fixture Entry to be recorded, got " + outcome);
+        }
+        return recorded;
     }
 
     /** Logs a staff user in over HTTP and returns the token issued. */
