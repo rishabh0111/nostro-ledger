@@ -7,6 +7,10 @@
 -- and the fact that no secret is stored in the clear.
 --
 -- The request-path role may only read; issuing and revoking are the control plane's (ADR-0015).
+--
+-- No stored credential holds CONTROL. The control plane's bootstrap credential comes from the
+-- environment, because it is what creates the first Tenant; a CONTROL row would be a caller that
+-- both acts for a Tenant and acts across them, and the CHECKs below make that unwritable.
 
 ------------------------------------------------------------------------------------------------
 -- API keys: long-lived, opaque, for machine callers. Stored as the SHA-256 of the key, which is
@@ -22,7 +26,8 @@ CREATE TABLE api_key (
     created_at  timestamptz NOT NULL DEFAULT now(),
     revoked_at  timestamptz,
 
-    PRIMARY KEY (tenant_id, id)
+    PRIMARY KEY (tenant_id, id),
+    CONSTRAINT api_key_holds_ledger_permissions CHECK (NOT ('CONTROL' = ANY (permissions)))
 );
 
 ------------------------------------------------------------------------------------------------
@@ -39,7 +44,8 @@ CREATE TABLE staff_user (
     created_at    timestamptz NOT NULL DEFAULT now(),
     revoked_at    timestamptz,
 
-    PRIMARY KEY (tenant_id, id)
+    PRIMARY KEY (tenant_id, id),
+    CONSTRAINT staff_user_holds_ledger_permissions CHECK (NOT ('CONTROL' = ANY (permissions)))
 );
 
 GRANT SELECT                 ON api_key, staff_user TO nostro_app;

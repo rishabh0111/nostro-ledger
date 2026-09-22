@@ -1,5 +1,8 @@
 package io.nostro.api;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import io.nostro.api.auth.ApiKey;
 import io.nostro.api.auth.Permission;
 import io.nostro.domain.TenantId;
@@ -12,14 +15,19 @@ import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * The one Spring context every database test shares (ADR-0012): the real application, against the
@@ -30,6 +38,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @SpringBootTest(properties = {
         "NOSTRO_APP_PASSWORD=app-secret",
         "NOSTRO_CONTROL_PASSWORD=control-secret",
+        "NOSTRO_CONTROL_KEY=" + LedgerIntegrationTest.CONTROL_KEY,
         "NOSTRO_JWT_SECRET=a-test-only-signing-secret-of-at-least-32-bytes",
         "spring.jpa.properties.hibernate.generate_statistics=true"
 })
@@ -37,6 +46,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 public abstract class LedgerIntegrationTest {
 
     static final PostgreSQLContainer POSTGRES = LedgerPostgres.instance();
+
+    /** The bootstrap credential the control plane is configured with, for this suite only (ADR-0015). */
+    protected static final String CONTROL_KEY = "nc_test-only-bootstrap-key-of-at-least-32-bytes";
 
     @DynamicPropertySource
     static void ledgerDatabase(DynamicPropertyRegistry registry) {
@@ -52,13 +64,19 @@ public abstract class LedgerIntegrationTest {
     @Autowired
     protected PlatformTransactionManager transactionManager;
 
+    @Autowired
+    protected MockMvc http;
+
+    @Autowired
+    protected JsonMapper json;
+
     /** The owner: the container's superuser, which bypasses every policy. For fixtures only. */
     protected JdbcClient asOwner() {
         var owner = new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         return JdbcClient.create(owner);
     }
 
-    /** Creates a Tenant directly, as the owner. The control plane arrives later. */
+    /** Creates a Tenant directly, as the owner: a fixture, not the control plane, which {@code ControlPlaneIT} exercises. */
     protected TenantId newTenant() {
         var id = TenantId.random();
         asOwner().sql("INSERT INTO tenant (id, name) VALUES (?, ?)")
@@ -67,7 +85,7 @@ public abstract class LedgerIntegrationTest {
         return id;
     }
 
-    /** Issues an API key for the Tenant directly, as the owner, and returns the key itself. The control plane arrives later. */
+    /** Issues an API key for the Tenant directly, as the owner, and returns the key itself. A fixture; the control plane is tested on its own. */
     protected ApiKey newApiKey(TenantId tenant, Permission... permissions) {
         var key = ApiKey.generate();
         asOwner().sql("INSERT INTO api_key (tenant_id, id, key_hash, label, permissions) VALUES (?, ?, ?, ?, ?)")
@@ -117,6 +135,42 @@ public abstract class LedgerIntegrationTest {
     /** A JdbcClient on the request-path DataSource; inside a transaction it uses that transaction's connection. */
     protected JdbcClient jdbc() {
         return JdbcClient.create(dataSource);
+    }
+
+    /** Opens an Account over HTTP with the {@code Authorization} value given, and returns its id. */
+    protected UUID openAccount(String authorization, String code) throws Exception {
+        MvcResult result = http.perform(post("/accounts").header(HttpHeaders.AUTHORIZATION, authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code": "%s", "currency": "USD", "constrained": false}
+                                """.formatted(code)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return UUID.fromString(json.readTree(result.getResponse().getContentAsString()).get("id").asString());
+    }
+
+    protected UUID openAccount(ApiKey key, String code) throws Exception {
+        return openAccount(bearer(key), code);
+    }
+
+    /** Logs a staff user in over HTTP and returns the token issued. */
+    protected String login(String username, String password) throws Exception {
+        MvcResult result = http.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username": "%s", "password": "%s"}
+                                """.formatted(username, password)))
+                .andExpect(status().isOk())
+                .andReturn();
+        return json.readTree(result.getResponse().getContentAsString()).get("token").asString();
+    }
+
+    protected static String bearer(ApiKey key) {
+        return "Bearer " + key.value();
+    }
+
+    /** The {@code Authorization} value of the control plane's bootstrap credential. */
+    protected static String controlBearer() {
+        return "Bearer " + CONTROL_KEY;
     }
 
     protected static UUID uuid() {

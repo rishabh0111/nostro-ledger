@@ -23,7 +23,7 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * One filter chain, two credential kinds (ADR-0006). Stateless: no session, no CSRF token, no
+ * One filter chain, two credential kinds (ADR-0006) and the control plane's bootstrap key (ADR-0015). Stateless: no session, no CSRF token, no
  * form, no basic auth, nothing remembered between requests but what the credential says.
  *
  * <p>Two declarations of what is public live here and in {@link Public}: the chain permits the
@@ -65,7 +65,7 @@ class SecurityConfiguration implements WebMvcConfigurer {
                 .build();
     }
 
-    /** The two providers, tried in order; the first to recognise the bearer answers for it. */
+    /** The three providers; each answers only for the bearer shape it recognises, so their order does not matter. */
     @Bean
     AuthenticationManager authenticationManager(List<AuthenticationProvider> providers) {
         return new ProviderManager(providers);

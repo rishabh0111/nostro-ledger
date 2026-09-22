@@ -53,3 +53,15 @@ nostro:
   auth:
     jwt-secret: ${NOSTRO_JWT_SECRET}
     jwt-ttl: 15m
+    # The control plane's bootstrap credential (ADR-0015): nc_ followed by at least 32 bytes. Not a
+    # row, because it is what creates the first Tenant.
+    control-key: ${NOSTRO_CONTROL_KEY}
+
+  # The control plane connects as nostro_control, over a pool of its own: the one surface that
+  # legitimately writes across Tenants, kept off the request path's role (ADR-0015).
+  control:
+    datasource:
+      url: ${spring.datasource.url}
+      username: nostro_control
+      password: ${NOSTRO_CONTROL_PASSWORD}
+    seed-demo-tenants: ${NOSTRO_SEED_DEMO_TENANTS:false}

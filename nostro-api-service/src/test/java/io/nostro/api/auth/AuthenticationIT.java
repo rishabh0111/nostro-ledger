@@ -20,9 +20,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * The credential is the only thing a request's Tenant is derived from (ADR-0006), tested at the
@@ -30,12 +27,6 @@ import tools.jackson.databind.json.JsonMapper;
  * nothing either way.
  */
 class AuthenticationIT extends LedgerIntegrationTest {
-
-    @Autowired
-    MockMvc http;
-
-    @Autowired
-    JsonMapper json;
 
     @Autowired
     AuthProperties properties;
@@ -68,7 +59,7 @@ class AuthenticationIT extends LedgerIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, "Bearer"))
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.type").value(ProblemResponses.UNAUTHENTICATED.toString()))
+                .andExpect(jsonPath("$.type").value("https://nostro.dev/problems/unauthenticated"))
                 .andExpect(jsonPath("$.status").value(401));
     }
 
@@ -100,18 +91,9 @@ class AuthenticationIT extends LedgerIntegrationTest {
                                 """))
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.type").value(ProblemResponses.FORBIDDEN.toString()));
+                .andExpect(jsonPath("$.type").value("https://nostro.dev/problems/forbidden"));
         assertThat(asOwner().sql("SELECT count(*) FROM account WHERE tenant_id = ? AND code = 'never'")
                 .param(tenant.value()).query(Long.class).single()).isZero();
-    }
-
-    @Test
-    @DisplayName("a control-plane credential cannot reach a ledger endpoint")
-    void aControlCredentialCannotReachTheLedger() throws Exception {
-        var control = newApiKey(newTenant(), Permission.CONTROL);
-
-        http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, bearer(control)))
-                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -154,7 +136,7 @@ class AuthenticationIT extends LedgerIntegrationTest {
 
         var expired = new StaffTokens(properties, Clock.fixed(Instant.now().minus(Duration.ofHours(1)), ZoneOffset.UTC))
                 .issue(user).token();
-        var forged = new StaffTokens(new AuthProperties("another-secret-that-is-also-32-bytes-long", properties.jwtTtl()),
+        var forged = new StaffTokens(new AuthProperties("another-secret-that-is-also-32-bytes-long", properties.jwtTtl(), properties.controlKey()),
                 Clock.systemUTC()).issue(user).token();
 
         http.perform(get("/accounts/{id}", uuid()).header(HttpHeaders.AUTHORIZATION, "Bearer " + expired))
@@ -186,7 +168,10 @@ class AuthenticationIT extends LedgerIntegrationTest {
     @DisplayName("the startup check ran against the real endpoints; the unit test proves it bites")
     void theStartupCheckSawEveryEndpoint() {
         assertThat(requiredPermissions.verifiedEndpoints())
-                .contains("AccountsController.open", "AccountsController.find", "LoginController.login");
+                .contains("AccountsController.open", "AccountsController.find", "LoginController.login",
+                        "ControlPlaneController.createTenant", "ControlPlaneController.issueApiKey",
+                        "ControlPlaneController.revokeApiKey", "ControlPlaneController.createStaffUser",
+                        "ControlPlaneController.revokeStaffUser");
     }
 
     @Test
@@ -198,33 +183,5 @@ class AuthenticationIT extends LedgerIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(400));
-    }
-
-    private UUID openAccount(ApiKey key, String code) throws Exception {
-        return openAccount(bearer(key), code);
-    }
-
-    private UUID openAccount(String authorization, String code) throws Exception {
-        MvcResult result = http.perform(post("/accounts").header(HttpHeaders.AUTHORIZATION, authorization)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"code": "%s", "currency": "USD", "constrained": false}
-                                """.formatted(code)))
-                .andExpect(status().isCreated())
-                .andReturn();
-        return UUID.fromString(json.readTree(result.getResponse().getContentAsString()).get("id").asString());
-    }
-
-    private String login(String username, String password) throws Exception {
-        MvcResult result = http.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content(json.writeValueAsString(new LoginController.Login(username, password))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.expiresAt").exists())
-                .andReturn();
-        return json.readTree(result.getResponse().getContentAsString()).get("token").asString();
-    }
-
-    private static String bearer(ApiKey key) {
-        return "Bearer " + key.value();
     }
 }

@@ -12,9 +12,11 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                  never from a file in the repository
  * @param jwtTtl    how long a staff token is good for; short, because a token cannot be revoked and
  *                  the staff user behind it can
+ * @param controlKey the control plane's bootstrap credential (ADR-0015), also from the environment;
+ *                   its shape is validated by {@link ControlKey}
  */
 @ConfigurationProperties("nostro.auth")
-public record AuthProperties(String jwtSecret, @DefaultValue("15m") Duration jwtTtl) {
+public record AuthProperties(String jwtSecret, @DefaultValue("15m") Duration jwtTtl, ControlKey controlKey) {
 
     public AuthProperties {
         if (jwtSecret == null || jwtSecret.getBytes(StandardCharsets.UTF_8).length < 32) {
@@ -22,6 +24,9 @@ public record AuthProperties(String jwtSecret, @DefaultValue("15m") Duration jwt
         }
         if (jwtTtl.isNegative() || jwtTtl.isZero()) {
             throw new IllegalArgumentException("nostro.auth.jwt-ttl must be positive");
+        }
+        if (controlKey == null) {
+            throw new IllegalArgumentException("nostro.auth.control-key is required");
         }
     }
 

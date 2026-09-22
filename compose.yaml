@@ -1,0 +1,43 @@
+# `docker compose up` is the whole first run (ADR-0006, ADR-0015): Postgres and the API service,
+# and when the service is up it has seeded two demo Tenants and printed their credentials to this
+# console. Every secret below has a dev-only default so there is nothing to configure; set the
+# variables in the environment or a .env file to override them. None of these defaults is fit for
+# anything but this stack.
+#
+# depends_on is the long form with a healthcheck: the short form is start order, not readiness,
+# and the API's migrations would race the database.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nostro
+      # The owner role: runs the migrations, bypasses row-level security by ownership, serves no request.
+      POSTGRES_USER: nostro
+      POSTGRES_PASSWORD: ${NOSTRO_DB_OWNER_PASSWORD:-dev-only-owner-password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nostro -d nostro"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  api:
+    build:
+      context: .
+      dockerfile: nostro-api-service/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NOSTRO_DB_URL: jdbc:postgresql://postgres:5432/nostro
+      NOSTRO_DB_OWNER: nostro
+      NOSTRO_DB_OWNER_PASSWORD: ${NOSTRO_DB_OWNER_PASSWORD:-dev-only-owner-password}
+      # The two roles the migration creates: the request path and the control plane (ADR-0015).
+      NOSTRO_APP_PASSWORD: ${NOSTRO_APP_PASSWORD:-dev-only-app-password}
+      NOSTRO_CONTROL_PASSWORD: ${NOSTRO_CONTROL_PASSWORD:-dev-only-control-password}
+      NOSTRO_JWT_SECRET: ${NOSTRO_JWT_SECRET:-dev-only-staff-token-signing-secret-of-32-bytes}
+      # The control plane's bootstrap credential: `Authorization: Bearer <this>` on /control/... .
+      NOSTRO_CONTROL_KEY: ${NOSTRO_CONTROL_KEY:-nc_dev-only-control-key-change-before-any-deploy}
+      # Seeds demo-alpha and demo-beta at startup and prints their keys. Only here.
+      NOSTRO_SEED_DEMO_TENANTS: "true"
+    ports:
+      - "8080:8080"

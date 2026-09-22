@@ -10,7 +10,7 @@ import org.springframework.security.oauth2.jwt.JwtValidationException;
 import org.springframework.stereotype.Component;
 
 /**
- * Staff: any bearer that is not an API key is taken to be a staff token. The token proves a
+ * Staff: any bearer that is neither an API key nor the control key is taken to be a staff token. The token proves a
  * recent login; the staff user's row, re-read here, says what they may do and for which Tenant.
  */
 @Component
@@ -27,7 +27,7 @@ class StaffTokenAuthenticationProvider implements AuthenticationProvider {
     @Override
     public @Nullable Authentication authenticate(Authentication authentication) {
         var bearer = (BearerCredential) authentication;
-        if (ApiKey.looksLike(bearer.token())) {
+        if (ApiKey.looksLike(bearer.token()) || ControlKey.looksLike(bearer.token())) {
             return null;
         }
         try {

@@ -27,6 +27,7 @@ public record Caller(Kind kind, UUID id, @Nullable TenantId boundTenant, Set<Per
 
     public enum Kind {
         API_KEY,
-        STAFF
+        STAFF,
+        CONTROL
     }
 }
