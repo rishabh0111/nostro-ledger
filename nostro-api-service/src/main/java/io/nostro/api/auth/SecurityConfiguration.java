@@ -1,6 +1,8 @@
 package io.nostro.api.auth;
 
 import jakarta.servlet.DispatcherType;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.nostro.api.ApiVersion;
 import io.nostro.api.ratelimit.RateLimitFilter;
 import io.nostro.api.ratelimit.TenantRateLimiter;
@@ -49,7 +51,7 @@ class SecurityConfiguration implements WebMvcConfigurer {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationManager authenticationManager,
-            ProblemResponses problems, TenantRateLimiter rateLimiter, JsonMapper json) throws Exception {
+            ProblemResponses problems, TenantRateLimiter rateLimiter, JsonMapper json, MeterRegistry meters) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -62,6 +64,9 @@ class SecurityConfiguration implements WebMvcConfigurer {
                         .requestMatchers(HttpMethod.POST, LOGIN_PATH).permitAll()
                         // The generated document and its UI: what the API is, not what it holds.
                         .requestMatchers(HttpMethod.GET, "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
+                        // Health and metrics, for compose's healthcheck and a scraper. Under compose they are on a
+                        // management port published to nothing; the metrics carry no Tenant as a label.
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/prometheus").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(problems)
@@ -69,7 +74,9 @@ class SecurityConfiguration implements WebMvcConfigurer {
                 .addFilterBefore(new BearerAuthenticationFilter(authenticationManager, problems), AuthorizationFilter.class)
                 .addFilterAfter(new TenantBindingFilter(), AuthorizationFilter.class)
                 // After the Tenant is bound: only an authenticated, authorised request spends its Tenant's budget.
-                .addFilterAfter(new RateLimitFilter(rateLimiter, json, () -> { }), TenantBindingFilter.class)
+                .addFilterAfter(new RateLimitFilter(rateLimiter, json, Counter.builder("nostro.ratelimit.unchecked")
+                        .description("Requests let through because Redis did not answer in time: a Tenant's budget was not checked")
+                        .register(meters)::increment), TenantBindingFilter.class)
                 .build();
     }
 

@@ -47,6 +47,8 @@
     <!-- The core library and its Lettuce integration, not the Spring Boot starter, which is stale and
          unverified on Boot 4.1. -->
     <bucket4j.version>8.20.0</bucket4j.version>
+    <!-- JDBC spans, so one trace reaches each service's database; the 2.3 line is built on Boot 4.1. -->
+    <datasource-micrometer.version>2.3.0</datasource-micrometer.version>
 
     <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
@@ -78,6 +80,11 @@
         <groupId>com.bucket4j</groupId>
         <artifactId>bucket4j_jdk17-lettuce</artifactId>
         <version>${bucket4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>net.ttddyy.observation</groupId>
+        <artifactId>datasource-micrometer-spring-boot</artifactId>
+        <version>${datasource-micrometer.version}</version>
       </dependency>
       <dependency>
         <groupId>io.nostro</groupId>

@@ -1,9 +1,14 @@
 package io.nostro.persistence.ledger;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import io.nostro.domain.EntryRecorder;
 import io.nostro.domain.LedgerCommand;
 import io.nostro.domain.RecordOutcome;
 import io.nostro.domain.RecordOutcome.AlreadyReversed;
+import io.nostro.domain.RecordOutcome.InsufficientBalance;
+import io.nostro.domain.RecordOutcome.Recorded;
 import io.nostro.domain.ReverseEntry;
 import java.time.Duration;
 import org.springframework.core.retry.RetryException;
@@ -28,6 +33,13 @@ import org.springframework.stereotype.Component;
  * </ul>
  * {@code 23514} is never retried: it is the answer "insufficient balance", already returned as a
  * value by the guarded UPDATE before the CHECK is ever reached.
+ *
+ * <p>Three metrics, because this is where the write path's costs are visible:
+ * {@code nostro.ledger.entries.write}, the whole
+ * call's latency, retries included, split by whether it took a Constrained Account's row lock —
+ * ADR-0004's asymmetry, measured; {@code nostro.ledger.floor.rejections}, the floor refusing; and
+ * {@code nostro.ledger.sql.failures} by SQLSTATE, every database refusal the writer met, retried or
+ * not, which is the histogram the load test reads.
  */
 @Component
 public class JpaEntryRecorder implements EntryRecorder {
@@ -37,9 +49,15 @@ public class JpaEntryRecorder implements EntryRecorder {
 
     private final EntryWriter writer;
     private final RetryTemplate transientFailures;
+    private final MeterRegistry meters;
+    private final Counter floorRejections;
 
-    JpaEntryRecorder(EntryWriter writer) {
+    JpaEntryRecorder(EntryWriter writer, MeterRegistry meters) {
         this.writer = writer;
+        this.meters = meters;
+        this.floorRejections = Counter.builder("nostro.ledger.floor.rejections")
+                .description("Entries refused because a Constrained Account would have gone below zero")
+                .register(meters);
         this.transientFailures = new RetryTemplate(RetryPolicy.builder()
                 .predicate(SqlFailure::isTransient)
                 .maxRetries(3)
@@ -52,8 +70,28 @@ public class JpaEntryRecorder implements EntryRecorder {
 
     @Override
     public RecordOutcome record(LedgerCommand command) {
+        var footprint = new EntryWriter.Footprint();
+        var started = Timer.start(meters);
+        RecordOutcome outcome = null;
         try {
-            return transientFailures.execute(() -> writeOnce(command));
+            outcome = recordWithRetries(command, footprint);
+            if (outcome instanceof InsufficientBalance) {
+                floorRejections.increment();
+            }
+            return outcome;
+        } finally {
+            started.stop(Timer.builder("nostro.ledger.entries.write")
+                    .description("Recording an Entry, retries included, by whether it took a Constrained Account's row lock")
+                    .tag("constrained", String.valueOf(footprint.constrained()))
+                    .tag("outcome", outcome instanceof Recorded ? "recorded" : outcome == null ? "failed" : "refused")
+                    .publishPercentileHistogram()
+                    .register(meters));
+        }
+    }
+
+    private RecordOutcome recordWithRetries(LedgerCommand command, EntryWriter.Footprint footprint) {
+        try {
+            return transientFailures.execute(() -> writeOnce(command, footprint));
         } catch (RetryException retry) {
             Throwable last = retry.getLastException();
             if (SqlFailure.isTransient(last)) {
@@ -65,12 +103,17 @@ public class JpaEntryRecorder implements EntryRecorder {
         }
     }
 
-    private RecordOutcome writeOnce(LedgerCommand command) {
+    private RecordOutcome writeOnce(LedgerCommand command, EntryWriter.Footprint footprint) {
         try {
-            return writer.write(command);
+            return writer.write(command, footprint);
         } catch (RuntimeException failure) {
+            SqlFailure.of(failure).ifPresent(sql -> Counter.builder("nostro.ledger.sql.failures")
+                    .description("Database refusals met while recording an Entry, by SQLSTATE, whether or not they were retried")
+                    .tag("sqlstate", sql.sqlState())
+                    .register(meters)
+                    .increment());
             if (SqlFailure.violates(failure, IDEMPOTENCY_KEY_INDEX)) {
-                return writer.write(command);
+                return writer.write(command, footprint);
             }
             if (SqlFailure.violates(failure, REVERSED_AT_MOST_ONCE) && command instanceof ReverseEntry reverse) {
                 return new AlreadyReversed(reverse.reverses());

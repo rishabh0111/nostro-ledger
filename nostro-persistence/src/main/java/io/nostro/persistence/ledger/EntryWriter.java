@@ -80,8 +80,21 @@ class EntryWriter {
         this.installation = installation;
     }
 
+    /**
+     * What a write did beyond its outcome, for {@link JpaEntryRecorder}'s metrics: whether it moved a
+     * Constrained Account's stored balance, and so took that Account's row lock. That lock is the
+     * whole of ADR-0004's asymmetry, and the metric splits write latency by it.
+     */
+    static final class Footprint {
+        private boolean constrained;
+
+        boolean constrained() {
+            return constrained;
+        }
+    }
+
     @Transactional
-    RecordOutcome write(LedgerCommand command) {
+    RecordOutcome write(LedgerCommand command, Footprint footprint) {
         TenantId tenant = TenantContext.required();
 
         var recorded = session.get(IdempotencyRecordEntity.class, IdempotencyRecordEntity.Id.of(tenant, command.idempotencyKey()));
@@ -133,7 +146,7 @@ class EntryWriter {
         var postingRows = postings.stream().map(p -> new PostingEntity(entryRow, p)).toList();
         session.insertMultiple(postingRows);
 
-        Optional<Refused> floor = moveConstrainedBalances(tenant, postings, accounts);
+        Optional<Refused> floor = moveConstrainedBalances(tenant, postings, accounts, footprint);
         if (floor.isPresent()) {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             return floor.get();
@@ -168,13 +181,14 @@ class EntryWriter {
      * statements: the documented deadlock prevention. Unconstrained Accounts move no row at all.
      */
     private Optional<Refused> moveConstrainedBalances(
-            TenantId tenant, List<Posting> postings, Map<AccountId, AccountEntity> accounts) {
+            TenantId tenant, List<Posting> postings, Map<AccountId, AccountEntity> accounts, Footprint footprint) {
         Map<AccountId, Money> deltas = new TreeMap<>();
         for (Posting posting : postings) {
             if (accounts.get(posting.account()).isConstrained()) {
                 deltas.merge(posting.account(), posting.amount(), Money::plus);
             }
         }
+        footprint.constrained = !deltas.isEmpty();
         for (var delta : deltas.entrySet()) {
             int moved = session.createNativeMutationQuery(MOVE_BALANCE)
                     .setParameter("delta", delta.getValue().minor())

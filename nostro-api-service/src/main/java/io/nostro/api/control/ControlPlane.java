@@ -5,6 +5,7 @@ import io.nostro.api.auth.Permission;
 import io.nostro.domain.TenantId;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -48,6 +49,17 @@ public class ControlPlane {
             return new TenantOutcome.NameTaken(name);
         }
         return new TenantOutcome.Created(new Tenant(id, name));
+    }
+
+    /**
+     * Every Tenant, for a sweep that then acts for each one in turn through the request path, under
+     * that Tenant's row-level security: knowing which Tenants exist is the control plane's, and what
+     * each one holds is not.
+     */
+    public List<TenantId> tenants() {
+        return database.jdbc().sql("SELECT id FROM tenant ORDER BY id")
+                .query((rs, row) -> new TenantId(rs.getObject("id", UUID.class)))
+                .list();
     }
 
     Optional<Tenant> findTenant(String name) {

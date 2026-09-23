@@ -27,6 +27,8 @@ import java.util.UUID;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
+import org.springframework.boot.micrometer.tracing.test.autoconfigure.AutoConfigureTracing;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
@@ -63,6 +65,9 @@ import tools.jackson.databind.json.JsonMapper;
         "nostro.rate-limit.refill-period=1h"
 })
 @AutoConfigureMockMvc
+// Metrics export and tracing are off in tests unless asked for; asked here, once, for every test.
+@AutoConfigureMetrics
+@AutoConfigureTracing
 public abstract class LedgerIntegrationTest {
 
     static final PostgreSQLContainer POSTGRES = LedgerPostgres.instance();

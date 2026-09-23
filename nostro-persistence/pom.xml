@@ -51,6 +51,11 @@
       <groupId>tools.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
     </dependency>
+    <!-- The write path's own metrics: latency by contention, floor refusals, SQLSTATEs. The registry is the application's. -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-core</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.junit.jupiter</groupId>

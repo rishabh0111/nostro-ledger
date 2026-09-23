@@ -17,6 +17,8 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -37,6 +39,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  */
 @Component
 class ProjectedBalanceReader implements BalanceReader {
+
+    private static final Logger log = LoggerFactory.getLogger(ProjectedBalanceReader.class);
 
     /** The statuses that mean the projection could not be reached or could not answer in time. */
     private static final Set<Status.Code> UNAVAILABLE = Set.of(
@@ -89,11 +93,13 @@ class ProjectedBalanceReader implements BalanceReader {
             } catch (StatusRuntimeException failed) {
                 var code = failed.getStatus().getCode();
                 if (code == Status.Code.UNAVAILABLE && attempt < properties.attempts()) {
+                    log.warn("the projection was {} for a Balance; attempt {} of {}", code, attempt, properties.attempts());
                     pause(backoff);
                     backoff = backoff.multipliedBy(2);
                     continue;
                 }
                 if (UNAVAILABLE.contains(code)) {
+                    log.warn("the projection did not answer for a Balance after {} attempt(s): {}", attempt, code);
                     throw new ProjectionUnavailable("the Balance could not be read: the projection did not answer (" + code + ")", failed);
                 }
                 throw failed;

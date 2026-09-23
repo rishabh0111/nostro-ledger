@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,8 +44,9 @@ class BalanceServiceIT extends ProjectionIntegrationTest {
     @LocalGrpcServerPort
     int port;
 
+    // The DataSource bean is a tracing proxy around the pool; the pool is what is being watched.
     @Autowired
-    HikariDataSource pool;
+    DataSource dataSource;
 
     private ManagedChannel channel;
 
@@ -178,6 +180,7 @@ class BalanceServiceIT extends ProjectionIntegrationTest {
         publish(only);
         awaitWatermark(tenant, only.createdAt());
         var unreachable = Optional.of(new Position(INSTALLATION, only.createdAt().xid8() + 1_000_000));
+        var pool = dataSource.unwrap(HikariDataSource.class);
         assertThat(pool.getMaximumPoolSize()).isLessThan(40);
         int platformThreadsBefore = ManagementFactory.getThreadMXBean().getThreadCount();
 

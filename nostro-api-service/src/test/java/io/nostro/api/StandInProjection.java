@@ -3,7 +3,11 @@ package io.nostro.api;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.Metadata;
 import io.grpc.Server;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -43,18 +47,21 @@ public final class StandInProjection extends BalanceServiceGrpc.BalanceServiceIm
     /** The real projection's default cap on waiting for a minimum Position. */
     static final Duration MAX_WAIT = Duration.ofSeconds(1);
 
+    private static final Metadata.Key<String> TRACEPARENT = Metadata.Key.of("traceparent", Metadata.ASCII_STRING_MARSHALLER);
+
     private final JdbcClient ledger;
     private volatile Long installation;
     private final Map<UUID, Long> stalledAt = new ConcurrentHashMap<>();
     private final Set<UUID> unreachable = ConcurrentHashMap.newKeySet();
     private final List<UUID> callers = new CopyOnWriteArrayList<>();
+    private final List<String> traceparents = new CopyOnWriteArrayList<>();
     private final Server server;
 
     StandInProjection(JdbcClient ledgerAsOwner) {
         this.ledger = ledgerAsOwner;
         try {
             this.server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
-                    .addService(ServerInterceptors.intercept(this, new TenantServerInterceptor()))
+                    .addService(ServerInterceptors.intercept(this, new TenantServerInterceptor(), new TraceparentRecorder()))
                     .build()
                     .start();
         } catch (IOException e) {
@@ -69,6 +76,11 @@ public final class StandInProjection extends BalanceServiceGrpc.BalanceServiceIm
     /** The Tenant each call arrived with, in order: what the API service's client interceptor sent. */
     public List<UUID> callers() {
         return List.copyOf(callers);
+    }
+
+    /** The W3C {@code traceparent} each call arrived with, in order, or empty where none was sent. */
+    public List<String> traceparents() {
+        return List.copyOf(traceparents);
     }
 
     /** From now on the Tenant's projection reflects what it reflects now, and nothing recorded after. */
@@ -141,6 +153,16 @@ public final class StandInProjection extends BalanceServiceGrpc.BalanceServiceIm
             Thread.sleep(Math.max(wait, 0));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /** Records the trace context a call carried, as a real server's tracing would read it. */
+    private final class TraceparentRecorder implements ServerInterceptor {
+        @Override
+        public <Q, R> ServerCall.Listener<Q> interceptCall(ServerCall<Q, R> call, Metadata headers, ServerCallHandler<Q, R> next) {
+            var traceparent = headers.get(TRACEPARENT);
+            traceparents.add(traceparent == null ? "" : traceparent);
+            return next.startCall(call, headers);
         }
     }
 }

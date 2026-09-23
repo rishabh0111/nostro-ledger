@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
@@ -107,7 +108,21 @@ class EntryApplier {
             throw new Unappliable("Entry " + message.entryId() + " does not balance: " + unbalanced);
         });
 
-        Outcome outcome = transactions.writingAs(tenant, jdbc -> {
+        Outcome outcome;
+        try (var logged = MDC.putCloseable("tenant", tenant.toString())) {
+            outcome = applyAs(tenant, message, position, postings, source);
+        }
+        if (outcome == Outcome.APPLIED) {
+            applied.increment();
+            watermarks.advanced(tenant, position);
+        } else {
+            duplicates.increment();
+        }
+        return outcome;
+    }
+
+    private Outcome applyAs(TenantId tenant, EntryRecorded message, Position position, List<Posting> postings, Source source) {
+        return transactions.writingAs(tenant, jdbc -> {
             if (claim(jdbc, message, position) == 0) {
                 advanceOffset(jdbc, source);
                 return Outcome.ALREADY_APPLIED;
@@ -119,14 +134,6 @@ class EntryApplier {
             advanceOffset(jdbc, source);
             return Outcome.APPLIED;
         });
-
-        if (outcome == Outcome.APPLIED) {
-            applied.increment();
-            watermarks.advanced(tenant, position);
-        } else {
-            duplicates.increment();
-        }
-        return outcome;
     }
 
     private static EntryRecorded parse(String key, String value) {

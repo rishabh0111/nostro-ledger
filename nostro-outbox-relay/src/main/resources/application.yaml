@@ -2,6 +2,10 @@ spring:
   application:
     name: nostro-outbox-relay
 
+# HTTP for the management endpoints and nothing else; never published beyond the compose network.
+server:
+  port: ${NOSTRO_RELAY_HTTP_PORT:8081}
+
 nostro:
   relay:
     # The ledger, as nostro_relay: it sees every Tenant's outbox rows and can change only
@@ -14,3 +18,27 @@ nostro:
       bootstrap-servers: ${NOSTRO_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
       # One broker under compose. The topic's partition count is not here: it is schema (EntryTopic).
       replication-factor: ${NOSTRO_KAFKA_REPLICATION_FACTOR:1}
+
+# Health (with Kubernetes-style liveness and readiness groups, which compose's healthchecks ask) and
+# Prometheus metrics. Nothing scrapes them here: exposing the endpoint is the deliverable, running
+# Prometheus is infrastructure. Every trace is
+# sampled, which suits a demonstration and would not suit production.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+
+# One JSON object per line, in the Elastic Common Schema, with the trace and span ids and the MDC:
+# the request's trace correlates every line of it, across services, and the Tenant is on each.
+logging:
+  structured:
+    format:
+      console: ecs

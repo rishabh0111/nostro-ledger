@@ -29,6 +29,10 @@ spring:
     server:
       port: ${NOSTRO_PROJECTION_GRPC_PORT:9090}
 
+# HTTP for the management endpoints and nothing else; the Balance service is gRPC.
+server:
+  port: ${NOSTRO_PROJECTION_HTTP_PORT:8082}
+
 nostro:
   projection:
     kafka:
@@ -36,3 +40,27 @@ nostro:
     balance:
       # The server's cap on a read waiting for its minimum Position (ADR-0007). An estimate.
       max-wait: 1s
+
+# Health (with Kubernetes-style liveness and readiness groups, which compose's healthchecks ask) and
+# Prometheus metrics. Nothing scrapes them here: exposing the endpoint is the deliverable, running
+# Prometheus is infrastructure. Every trace is
+# sampled, which suits a demonstration and would not suit production.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+
+# One JSON object per line, in the Elastic Common Schema, with the trace and span ids and the MDC:
+# the request's trace correlates every line of it, across services, and the Tenant is on each.
+logging:
+  structured:
+    format:
+      console: ecs

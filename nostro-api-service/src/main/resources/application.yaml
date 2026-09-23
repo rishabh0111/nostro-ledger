@@ -89,3 +89,27 @@ nostro:
 springdoc:
   default-produces-media-type: application/json
   writer-with-order-by-keys: true
+
+# Health (with Kubernetes-style liveness and readiness groups, which compose's healthchecks ask) and
+# Prometheus metrics. Nothing scrapes them here: exposing the endpoint is the deliverable, running
+# Prometheus is infrastructure. Every trace is
+# sampled, which suits a demonstration and would not suit production.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+
+# One JSON object per line, in the Elastic Common Schema, with the trace and span ids and the MDC:
+# the request's trace correlates every line of it, across services, and the Tenant is on each.
+logging:
+  structured:
+    format:
+      console: ecs

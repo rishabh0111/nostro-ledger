@@ -69,9 +69,44 @@
       <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
     </dependency>
 
+    <!-- Observability: health and Prometheus metrics,
+         Brave for trace propagation and log correlation (no exporter: collecting traces is infrastructure,
+         out of scope), and JDBC spans. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-micrometer-tracing-brave</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-tracing-bridge-brave</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>net.ttddyy.observation</groupId>
+      <artifactId>datasource-micrometer-spring-boot</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>io.nostro</groupId>
       <artifactId>nostro-test-support</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Tests run with metrics export and tracing off unless asked; the one base class asks. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-micrometer-tracing-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-micrometer-metrics-test</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
@@ -38,7 +39,9 @@ public class RequiredPermissions implements SmartInitializingSingleton, HandlerI
 
     private List<String> verified = List.of();
 
-    RequiredPermissions(ObjectProvider<RequestMappingHandlerMapping> handlerMapping) {
+    // By name: actuator adds a second RequestMappingHandlerMapping, for its own controller endpoints,
+    // which are not this application's and are secured by the filter chain.
+    RequiredPermissions(@Qualifier("requestMappingHandlerMapping") ObjectProvider<RequestMappingHandlerMapping> handlerMapping) {
         this.handlerMapping = handlerMapping;
     }
 

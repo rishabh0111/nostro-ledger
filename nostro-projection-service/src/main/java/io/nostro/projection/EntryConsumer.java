@@ -3,6 +3,7 @@ package io.nostro.projection;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
@@ -53,6 +54,7 @@ final class EntryConsumer implements SmartLifecycle {
     private final Duration retryBackoff;
     private final Set<TopicPartition> halted = ConcurrentHashMap.newKeySet();
     private final Counter halts;
+    private final MeterRegistry meters;
 
     private volatile boolean running;
     private volatile Consumer<String, String> consumer;
@@ -65,6 +67,7 @@ final class EntryConsumer implements SmartLifecycle {
         this.applier = applier;
         this.jdbc = jdbc;
         this.retryBackoff = retryBackoff;
+        this.meters = meters;
         Gauge.builder("nostro.projection.partitions.halted", halted, Set::size)
                 .description("Partitions stopped at a message the projection will not apply; anything but zero needs a person")
                 .register(meters);
@@ -112,7 +115,9 @@ final class EntryConsumer implements SmartLifecycle {
 
     private void run() {
         while (running) {
-            try (Consumer<String, String> kafka = consumers.get()) {
+            // The client's own metrics, lag per partition among them: offsets belong in metrics, not in the API.
+            try (Consumer<String, String> kafka = consumers.get(); var clientMetrics = new KafkaClientMetrics(kafka)) {
+                clientMetrics.bindTo(meters);
                 consumer = kafka;
                 kafka.subscribe(List.of(topic), new SeekToStoredOffsets(kafka));
                 while (running) {

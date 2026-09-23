@@ -1,5 +1,7 @@
 package io.nostro.relay;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
 import io.nostro.outbox.EntryTopic;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -22,17 +24,25 @@ class RelayConfiguration {
         return new KafkaProducer<>(ProducerSettings.of(properties.kafka().bootstrapServers(), properties.kafka().producer()));
     }
 
+    /** The producer's own metrics — send rates, errors, retries, request latency — beside the relay's. */
+    @Bean(destroyMethod = "close")
+    KafkaClientMetrics entryProducerMetrics(Producer<String, String> entryProducer, MeterRegistry meters) {
+        var metrics = new KafkaClientMetrics(entryProducer);
+        metrics.bindTo(meters);
+        return metrics;
+    }
+
     /**
      * The relay, built only once the topic has been verified: a relay that cannot confirm the
      * partition count does not start, so it never publishes into the wrong layout.
      */
     @Bean
-    OutboxRelay outboxRelay(RelayProperties properties, Producer<String, String> entryProducer) {
+    OutboxRelay outboxRelay(RelayProperties properties, Producer<String, String> entryProducer, MeterRegistry meters) {
         try (Admin admin = Admin.create(Map.of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, properties.kafka().bootstrapServers()))) {
             new TopicSchema(EntryTopic.NAME, EntryTopic.PARTITIONS, properties.kafka().replicationFactor()).ensure(admin);
         }
         var drain = new OutboxDrain(entryProducer, EntryTopic.NAME, properties.batchSize());
-        return new OutboxRelay(() -> connect(properties.database()), drain, properties.timing());
+        return new OutboxRelay(() -> connect(properties.database()), drain, properties.timing(), meters);
     }
 
     /**

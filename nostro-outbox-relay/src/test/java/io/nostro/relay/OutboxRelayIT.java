@@ -7,6 +7,7 @@ import static io.nostro.relay.RelayFixture.record;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.nostro.relay.RelayFixture.Written;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -122,7 +123,7 @@ class OutboxRelayIT {
     private OutboxRelay relay(int batchSize) {
         Producer<String, String> producer = new KafkaProducer<>(ProducerSettings.of(RelayFixture.KAFKA.getBootstrapServers(), Map.of()));
         producers.add(producer);
-        var relay = new OutboxRelay(RelayFixture::relayConnection, new OutboxDrain(producer, TOPIC, batchSize), FAST);
+        var relay = new OutboxRelay(RelayFixture::relayConnection, new OutboxDrain(producer, TOPIC, batchSize), FAST, new SimpleMeterRegistry());
         relays.add(relay);
         return relay;
     }

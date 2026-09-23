@@ -1,5 +1,8 @@
 package io.nostro.relay;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -42,15 +45,22 @@ final class OutboxRelay implements SmartLifecycle {
     private final Database database;
     private final OutboxDrain drain;
     private final Timing timing;
+    private final Counter published;
 
     private volatile boolean running;
     private volatile State state = State.STOPPED;
     private Thread thread;
 
-    OutboxRelay(Database database, OutboxDrain drain, Timing timing) {
+    OutboxRelay(Database database, OutboxDrain drain, Timing timing, MeterRegistry meters) {
         this.database = database;
         this.drain = drain;
         this.timing = timing;
+        this.published = Counter.builder("nostro.relay.published")
+                .description("Outbox rows published and marked; a batch published again after a crash counts again")
+                .register(meters);
+        Gauge.builder("nostro.relay.leading", this, relay -> relay.state == State.LEADING ? 1 : 0)
+                .description("1 while this relay holds the lead and drains the outbox; across all relays it must sum to one")
+                .register(meters);
     }
 
     State state() {
@@ -100,7 +110,9 @@ final class OutboxRelay implements SmartLifecycle {
                 state = State.LEADING;
                 log.info("leading: this relay is the outbox's single writer");
                 while (running) {
-                    if (drain.drainOnce(connection) == 0) {
+                    int drained = drain.drainOnce(connection);
+                    published.increment(drained);
+                    if (drained == 0) {
                         pause(timing.idlePoll());
                     }
                 }

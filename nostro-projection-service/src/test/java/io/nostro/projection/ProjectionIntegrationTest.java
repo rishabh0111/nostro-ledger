@@ -28,7 +28,10 @@ import org.apache.kafka.common.errors.TopicExistsException;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.Utils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
+import org.springframework.boot.micrometer.tracing.test.autoconfigure.AutoConfigureTracing;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -52,6 +55,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
         // A real port, never the in-process transport: metadata is what carries the Tenant (ADR-0012).
         "spring.grpc.server.port=0"
 })
+// Metrics export and tracing are off in tests unless asked for; asked here, once, for every test.
+@AutoConfigureMetrics
+@AutoConfigureTracing
+@Import(CapturedSpans.class)
 public abstract class ProjectionIntegrationTest {
 
     static final PostgreSQLContainer POSTGRES = ProjectionPostgres.instance();

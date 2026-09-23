@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.MDC;
 import org.springframework.grpc.server.service.GrpcService;
 
 /**
@@ -50,6 +51,12 @@ class BalanceGrpcService extends BalanceServiceGrpc.BalanceServiceImplBase {
     public void getBalance(GetBalanceRequest request, StreamObserver<GetBalanceResponse> response) {
         var tenant = new TenantId(TenantMetadata.current().orElseThrow(() ->
                 Status.UNAUTHENTICATED.withDescription("no Tenant on the call").asRuntimeException()));
+        try (var logged = MDC.putCloseable("tenant", tenant.toString())) {
+            answer(tenant, request, response);
+        }
+    }
+
+    private void answer(TenantId tenant, GetBalanceRequest request, StreamObserver<GetBalanceResponse> response) {
         var account = new AccountId(parse(request.getAccountId()));
         Optional<Position> minimum = request.getMinPosition().isEmpty()
                 ? Optional.empty()

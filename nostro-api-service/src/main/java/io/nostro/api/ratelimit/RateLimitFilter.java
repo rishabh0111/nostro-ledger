@@ -25,7 +25,8 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p><b>If Redis cannot be asked, the request goes ahead.</b> A rate limit protects Tenants from each
  * other; a ledger that stopped recording Entries because its rate-limit store was down would turn
- * that protection into the outage. Every such request is logged here, and counted where metrics are.
+ * that protection into the outage. Every such request is logged here and counted, as
+ * {@code nostro.ratelimit.unchecked}.
  */
 public final class RateLimitFilter extends OncePerRequestFilter {
 

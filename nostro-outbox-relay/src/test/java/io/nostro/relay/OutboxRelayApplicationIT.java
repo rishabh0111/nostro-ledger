@@ -6,6 +6,7 @@ import static io.nostro.relay.RelayFixture.record;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import io.nostro.outbox.EntryTopic;
 import java.util.Map;
 import java.util.Set;
@@ -39,8 +40,11 @@ class OutboxRelayApplicationIT {
     @Autowired
     OutboxRelay relay;
 
+    @Autowired
+    MeterRegistry meters;
+
     @Test
-    @DisplayName("started, the relay has made the Entries topic with its fixed partition count, leads, and publishes what is recorded")
+    @DisplayName("started, the relay has made the Entries topic with its fixed partition count, leads, and publishes what is recorded, and says so in its metrics")
     void theDeployableDrainsOnItsOwn() throws Exception {
         try (var admin = Admin.create(Map.of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, RelayFixture.KAFKA.getBootstrapServers()))) {
             var topic = admin.describeTopics(Set.of(EntryTopic.NAME)).allTopicNames().get().get(EntryTopic.NAME);
@@ -55,5 +59,8 @@ class OutboxRelayApplicationIT {
         var published = read(EntryTopic.NAME, Set.of(tenant), 1);
         assertThat(published).hasSize(1);
         assertThat(published.getFirst().key()).isEqualTo(EntryTopic.key(tenant));
+        assertThat(meters.get("nostro.relay.leading").gauge().value()).isEqualTo(1.0);
+        assertThat(meters.get("nostro.relay.published").counter().count()).isGreaterThanOrEqualTo(1.0);
+        assertThat(meters.find("kafka.producer.record.send.total").meters()).as("the producer's own metrics").isNotEmpty();
     }
 }
