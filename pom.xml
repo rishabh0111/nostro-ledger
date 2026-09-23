@@ -44,6 +44,9 @@
     <protobuf.version>4.35.1</protobuf.version>
     <grpc.version>1.83.1</grpc.version>
     <protobuf-maven-plugin.version>5.1.8</protobuf-maven-plugin.version>
+    <!-- The core library and its Lettuce integration, not the Spring Boot starter, which is stale and
+         unverified on Boot 4.1. -->
+    <bucket4j.version>8.20.0</bucket4j.version>
 
     <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
@@ -65,6 +68,16 @@
         <groupId>org.springdoc</groupId>
         <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         <version>${springdoc.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.bucket4j</groupId>
+        <artifactId>bucket4j_jdk17-core</artifactId>
+        <version>${bucket4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.bucket4j</groupId>
+        <artifactId>bucket4j_jdk17-lettuce</artifactId>
+        <version>${bucket4j.version}</version>
       </dependency>
       <dependency>
         <groupId>io.nostro</groupId>

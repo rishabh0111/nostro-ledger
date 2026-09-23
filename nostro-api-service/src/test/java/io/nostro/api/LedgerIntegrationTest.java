@@ -20,6 +20,7 @@ import io.nostro.domain.RecordOutcome.Recorded;
 import io.nostro.domain.TenantId;
 import io.nostro.persistence.tenant.TenantContext;
 import io.nostro.testsupport.LedgerPostgres;
+import io.nostro.testsupport.LedgerRedis;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
@@ -45,9 +46,10 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * The one Spring context every database test shares (ADR-0012): the real application, against the
- * suite's singleton Postgres, connected as the restricted request-path role. Subclasses add no
- * properties, no mocked beans and no {@code @DirtiesContext}, because each of those is a second
- * context and a second application startup.
+ * suite's singleton Postgres, connected as the restricted request-path role, with the suite's Redis
+ * for rate limits and a {@link StandInProjection} for Balances. Subclasses add no properties, no
+ * mocked beans and no {@code @DirtiesContext}, because each of those is a second context and a
+ * second application startup.
  */
 @SpringBootTest(properties = {
         "NOSTRO_APP_PASSWORD=app-secret",
@@ -55,7 +57,10 @@ import tools.jackson.databind.json.JsonMapper;
         "NOSTRO_RELAY_PASSWORD=relay-secret",
         "NOSTRO_CONTROL_KEY=" + LedgerIntegrationTest.CONTROL_KEY,
         "NOSTRO_JWT_SECRET=a-test-only-signing-secret-of-at-least-32-bytes",
-        "spring.jpa.properties.hibernate.generate_statistics=true"
+        "spring.jpa.properties.hibernate.generate_statistics=true",
+        // A Tenant's budget refills over an hour here, not a second, so a test that spends one sees it spent:
+        // at a hundred a second a token is back before the next request arrives.
+        "nostro.rate-limit.refill-period=1h"
 })
 @AutoConfigureMockMvc
 public abstract class LedgerIntegrationTest {
@@ -74,6 +79,7 @@ public abstract class LedgerIntegrationTest {
         registry.add("spring.flyway.user", POSTGRES::getUsername);
         registry.add("spring.flyway.password", POSTGRES::getPassword);
         registry.add("spring.grpc.client.channel.projection.target", () -> "static://localhost:" + projection().port());
+        registry.add("nostro.rate-limit.redis-uri", LedgerRedis::uri);
     }
 
     /** The projection the API service talks to in these tests: a stand-in on a real port, one for the suite (ADR-0012). */

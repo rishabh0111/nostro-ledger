@@ -49,6 +49,20 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-grpc-client</artifactId>
     </dependency>
+    <!-- Per-Tenant rate limits shared across API instances (ADR-0008): Bucket4j's core and its Lettuce
+         integration against Redis, and the Lettuce client itself, whose version Boot manages. -->
+    <dependency>
+      <groupId>com.bucket4j</groupId>
+      <artifactId>bucket4j_jdk17-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.bucket4j</groupId>
+      <artifactId>bucket4j_jdk17-lettuce</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.lettuce</groupId>
+      <artifactId>lettuce-core</artifactId>
+    </dependency>
     <!-- OpenAPI generated from the code, never hand-maintained; the UI is what a reviewer opens first. -->
     <dependency>
       <groupId>org.springdoc</groupId>

@@ -2,6 +2,7 @@ package io.nostro.api.docs;
 
 import io.nostro.api.ApiVersion;
 import io.nostro.api.auth.LoginController;
+import io.nostro.api.auth.Permission;
 import io.nostro.api.auth.Public;
 import io.nostro.api.auth.Requires;
 import io.nostro.api.problem.ProblemType;
@@ -83,6 +84,9 @@ class OpenApiConfiguration {
             if (handler.hasMethodAnnotation(Requires.class)) {
                 refusals.add(ProblemType.UNAUTHENTICATED);
                 refusals.add(ProblemType.FORBIDDEN);
+                if (spendsATenantBudget(handler.getMethodAnnotation(Requires.class))) {
+                    refusals.add(ProblemType.RATE_LIMITED);
+                }
             }
             Refuses declared = handler.getMethodAnnotation(Refuses.class);
             if (declared != null) {
@@ -95,6 +99,14 @@ class OpenApiConfiguration {
             byStatus.forEach((status, types) -> operation.getResponses().addApiResponse(String.valueOf(status), problemResponse(types)));
             return operation;
         };
+    }
+
+    /**
+     * Whether a caller of the operation has a Tenant, and so a budget the rate limit spends: any
+     * operation a ledger Permission opens. The control plane's is no Tenant's.
+     */
+    static boolean spendsATenantBudget(Requires requires) {
+        return Arrays.stream(requires.value()).anyMatch(permission -> permission != Permission.CONTROL);
     }
 
     /** Sorts the paths, so the document reads the same however the handlers were discovered. */

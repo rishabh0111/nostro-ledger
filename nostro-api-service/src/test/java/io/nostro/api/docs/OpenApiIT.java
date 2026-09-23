@@ -69,16 +69,18 @@ class OpenApiIT extends LedgerIntegrationTest {
     }
 
     @Test
-    @DisplayName("an operation that requires a Permission documents 401 and 403; the public one documents neither and needs no credential")
+    @DisplayName("an operation that requires a Permission documents 401 and 403, and 429 where a Tenant's budget is spent; the public one documents none and needs no credential")
     void securityIsDocumentedPerOperation() throws Exception {
         var paths = document().get("paths");
         var openAccount = paths.get("/v1/accounts").get("post");
         var login = paths.get("/v1/auth/login").get("post");
 
-        assertThat(openAccount.get("responses").propertyNames()).contains("201", "400", "401", "403", "409");
+        assertThat(openAccount.get("responses").propertyNames()).contains("201", "400", "401", "403", "409", "429");
+        assertThat(paths.get("/v1/control/tenants").get("post").get("responses").propertyNames())
+                .as("the control plane has no Tenant, so no budget").contains("401", "403").doesNotContain("429");
         assertThat(openAccount.has("security")).as("inherits the document's bearer requirement").isFalse();
         assertThat(login.get("security")).as("explicitly none").isEmpty();
-        assertThat(login.get("responses").propertyNames()).contains("200", "400", "401").doesNotContain("403");
+        assertThat(login.get("responses").propertyNames()).contains("200", "400", "401").doesNotContain("403", "429");
     }
 
     @Test
@@ -88,7 +90,7 @@ class OpenApiIT extends LedgerIntegrationTest {
 
         List<String> statuses = new ArrayList<>();
         record.propertyNames().forEach(statuses::add);
-        assertThat(statuses).containsExactlyInAnyOrder("201", "400", "401", "403", "404", "422");
+        assertThat(statuses).containsExactlyInAnyOrder("201", "400", "401", "403", "404", "422", "429");
         var unprocessable = record.get("422");
         assertThat(unprocessable.get("description").asString())
                 .contains(ProblemType.UNBALANCED.uri().toString())

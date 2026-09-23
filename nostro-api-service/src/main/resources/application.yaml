@@ -76,6 +76,14 @@ nostro:
       password: ${NOSTRO_CONTROL_PASSWORD}
     seed-demo-tenants: ${NOSTRO_SEED_DEMO_TENANTS:false}
 
+  # Per-Tenant request budgets, in Redis so every API instance draws on the same one (ADR-0008).
+  # Redis holds these and nothing else. Estimates, to be revisited against the load test.
+  rate-limit:
+    redis-uri: ${NOSTRO_REDIS_URI:redis://localhost:6379}
+    capacity: 200
+    refill: 100
+    refill-period: 1s
+
 # The OpenAPI document, generated from the code and never hand-maintained: /v3/api-docs,
 # its YAML form at /v3/api-docs.yaml, and the UI at /swagger-ui.html.
 springdoc:

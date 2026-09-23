@@ -29,6 +29,11 @@ public enum ProblemType {
     /** A currency code that is not one the ledger can post: not ISO 4217, or without a smallest unit. */
     UNKNOWN_CURRENCY("unknown-currency", HttpStatus.BAD_REQUEST, "Unknown currency"),
 
+    // -- the Tenant's request budget (ADR-0008) ----------------------------------------------------
+
+    /** The Tenant has spent its budget for now; {@code Retry-After} says when there is more. */
+    RATE_LIMITED("rate-limited", HttpStatus.TOO_MANY_REQUESTS, "Rate limited"),
+
     // -- Accounts --------------------------------------------------------------------------------
 
     ACCOUNT_CODE_TAKEN("account-code-taken", HttpStatus.CONFLICT, "Account code taken"),

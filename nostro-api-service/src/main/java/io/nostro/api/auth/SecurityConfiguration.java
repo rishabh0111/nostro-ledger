@@ -2,6 +2,8 @@ package io.nostro.api.auth;
 
 import jakarta.servlet.DispatcherType;
 import io.nostro.api.ApiVersion;
+import io.nostro.api.ratelimit.RateLimitFilter;
+import io.nostro.api.ratelimit.TenantRateLimiter;
 import java.time.Clock;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -22,6 +24,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * One filter chain, two credential kinds (ADR-0006) and the control plane's bootstrap key (ADR-0015). Stateless: no session, no CSRF token, no
@@ -46,7 +49,7 @@ class SecurityConfiguration implements WebMvcConfigurer {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationManager authenticationManager,
-            ProblemResponses problems) throws Exception {
+            ProblemResponses problems, TenantRateLimiter rateLimiter, JsonMapper json) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -65,6 +68,8 @@ class SecurityConfiguration implements WebMvcConfigurer {
                         .accessDeniedHandler(problems))
                 .addFilterBefore(new BearerAuthenticationFilter(authenticationManager, problems), AuthorizationFilter.class)
                 .addFilterAfter(new TenantBindingFilter(), AuthorizationFilter.class)
+                // After the Tenant is bound: only an authenticated, authorised request spends its Tenant's budget.
+                .addFilterAfter(new RateLimitFilter(rateLimiter, json, () -> { }), TenantBindingFilter.class)
                 .build();
     }
 
