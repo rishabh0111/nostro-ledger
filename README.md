@@ -1,67 +1,54 @@
-# Nostro
+# nostro-ledger
 
-[![CI](https://github.com/rishabh0111/nostro-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/rishabh0111/nostro-lab/actions/workflows/ci.yml)
+[![CI](https://github.com/rishabh0111/nostro-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/rishabh0111/nostro-ledger/actions/workflows/ci.yml)
+![Java 21](https://img.shields.io/badge/Java_21-ED8B00?style=flat&logo=openjdk&logoColor=white)
+![Spring Boot 4](https://img.shields.io/badge/Spring_Boot_4-6DB33F?style=flat&logo=springboot&logoColor=white)
+![Hibernate 7](https://img.shields.io/badge/Hibernate_7-59666C?style=flat&logo=hibernate&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white)
+![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-231F20?style=flat&logo=apachekafka&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-FF4438?style=flat&logo=redis&logoColor=white)
+![gRPC](https://img.shields.io/badge/gRPC-244C5A?style=flat&logo=grpc&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+![OpenAPI](https://img.shields.io/badge/OpenAPI-6BA539?style=flat&logo=openapiinitiative&logoColor=white)
 
-A multitenant double-entry ledger, exposed as an HTTP API. Tenants record movements of money; the
-system's job is to make it structurally impossible to record one that does not balance, to lose one,
-to apply one twice, or to let one tenant's money touch another's. Every one of those guarantees is
-held by the Postgres schema — constraints, row-level security, a restricted request-path role — and
-each has a test that would fail if it broke.
+[Load test results](docs/results/2026-09-23-load-test/README.md) ·
+[Design decisions](docs/adr/) ·
+[CI runs](https://github.com/rishabh0111/nostro-ledger/actions/workflows/ci.yml)
+
+Nostro is a multitenant double-entry ledger with an HTTP API. It runs as three Spring Boot services
+on Java 21, with Postgres, Kafka, Redis and gRPC between them.
+
+A ledger can get money wrong in four ways. It can record a movement that does not balance, lose one,
+apply one twice, or let one tenant touch another tenant's money. Nostro refuses all four in the
+Postgres schema itself, using constraints, row-level security and a request-path role that owns no
+tables and bypasses no policy. The application checks too, but the database would refuse the write
+even if the application tried to make it.
+
+Twenty-five claims below each name the test that proves them. CI runs those tests against real
+Postgres, Kafka and Redis containers on every push, then republishes the list as the run summary,
+ticked from the test reports. In the load test, 32 concurrent writers hit one hot account. All 6,346
+requests were either recorded or refused at the balance floor, with zero database errors.
+
+## Running it
 
 ```sh
 docker compose up --build
 ```
 
-That is the whole first run: two Postgres servers (the ledger's and the projection's), Kafka, Redis, a
-migration container for each database, and the three services — the API on `localhost:8080`, the
-outbox relay, the projection. When it is up, two demo Tenants are seeded and their API keys printed to
-the console. Nothing to sign up for, nothing to configure. The walkthrough below goes from there to a
-refused cross-tenant write in six requests.
+That is the whole first run. Compose starts two Postgres servers (the ledger's and the
+projection's), Kafka, Redis, a migration job for each database, and the three services. The API
+listens on `http://localhost:8080`. When it is up, two demo Tenants are seeded and their API keys are
+printed to the console. There is nothing to sign up for and no key to obtain.
 
-## The invariants, and the test that proves each
+You need Docker. To run the tests you also need JDK 21.
 
-| Claim | Proof |
-| --- | --- |
-| A cross-tenant write is refused by the schema, before any application code | [`SchemaInvariantsIT.aCrossTenantReferenceIsRefusedByTheForeignKey`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java) |
-| A cross-tenant read returns no rows, never an error that confirms the row exists | [`SchemaInvariantsIT.aCrossTenantReadReturnsNothing`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java), and over HTTP [`EntriesIT.anotherTenantsAccountIsAbsent`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java) |
-| The request-path role is not a superuser and cannot bypass row-level security | [`SchemaInvariantsIT.theRequestPathRoleBypassesNothing`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java) |
-| With no Tenant bound, reads see nothing and writes are refused | [`SchemaInvariantsIT.noTenantContextFailsClosed`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java), [`TenantContextIT.noTenantBoundFailsClosedTwice`](nostro-api-service/src/test/java/io/nostro/api/tenant/TenantContextIT.java) |
-| A valid credential for one Tenant, on a request naming another's Account, finds nothing | [`AuthenticationIT.anotherTenantsAccountIsAbsentNotForbidden`](nostro-api-service/src/test/java/io/nostro/api/auth/AuthenticationIT.java) |
-| An unbalanced Entry is refused — by the domain as a value, and by the schema at `COMMIT` even from raw SQL | [`EntriesIT.anUnbalancedEntryIsRefused`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java), [`SchemaInvariantsIT.anUnbalancedEntryIsRefusedByTheSchema`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java) |
-| A Constrained Account never goes negative: 40 concurrent writers against one Account produce only floor refusals | [`RecordEntryIT.concurrentWritersToOneConstrainedAccount`](nostro-api-service/src/test/java/io/nostro/api/ledger/RecordEntryIT.java), and the `CHECK` behind the guard, [`SchemaInvariantsIT.theFloorIsACheckConstraint`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java) |
-| Writers touching two Constrained Accounts in opposite orders never deadlock | [`RecordEntryIT.oppositeOrderWritersDoNotDeadlock`](nostro-api-service/src/test/java/io/nostro/api/ledger/RecordEntryIT.java) |
-| A replayed Idempotency Key returns the first answer verbatim; concurrent replays record once | [`EntriesIT.anIdempotencyKeyIsHonoured`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java), [`RecordEntryIT.concurrentDuplicatesRecordOnce`](nostro-api-service/src/test/java/io/nostro/api/ledger/RecordEntryIT.java) |
-| An Entry is immutable once recorded, and reversed at most once | [`SchemaInvariantsIT.entryAndPostingCannotBeUpdatedOrDeleted`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java), [`EntriesIT.anEntryIsReversedAtMostOnce`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java) |
-| A Reversing Entry is subject to the floor: a correction can be refused | [`EntriesIT.aReversalIsRefusedAtTheFloor`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java) |
-| An endpoint added without a permission declaration stops the application from starting | [`RequiredPermissionsTest.anUndeclaredEndpointFailsStartup`](nostro-api-service/src/test/java/io/nostro/api/auth/RequiredPermissionsTest.java) |
-| A refusal the ledger learns to express without a response mapped is a compile error | [`LedgerRefusals`](nostro-api-service/src/main/java/io/nostro/api/ledger/LedgerRefusals.java) is an exhaustive switch over a sealed type; [`LedgerRefusalsTest`](nostro-api-service/src/test/java/io/nostro/api/ledger/LedgerRefusalsTest.java) pins each case |
-| Every refusal is an RFC 9457 body with a `type` from a closed catalog — the framework's own refusals included | [`EntriesIT.frameworkRefusalsCarryTheMalformedType`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java), [`AuthenticationIT.noCredentialIsUnauthenticated`](nostro-api-service/src/test/java/io/nostro/api/auth/AuthenticationIT.java) |
-| The whole catalog is in the generated OpenAPI document, and every endpoint is | [`OpenApiIT.everyProblemTypeAppears`](nostro-api-service/src/test/java/io/nostro/api/docs/OpenApiIT.java), [`OpenApiIT.everyHandlerIsAnOperation`](nostro-api-service/src/test/java/io/nostro/api/docs/OpenApiIT.java) |
-| Nothing in the request path borrows a second connection inside a transaction | [`TenantContextIT.nothingInTheRequestPathOpensASecondConnectionInsideATransaction`](nostro-api-service/src/test/java/io/nostro/api/tenant/TenantContextIT.java) |
-| A Tenant's Entries are published in the order they were recorded, a late committer is never overtaken, and a relay killed mid-drain loses none | [`OutboxRelayIT.aKilledLeaderIsReplacedAndNothingIsLost`](nostro-outbox-relay/src/test/java/io/nostro/relay/OutboxRelayIT.java), [`OutboxDrainIT.aLateCommitterIsNotOvertaken`](nostro-outbox-relay/src/test/java/io/nostro/relay/OutboxDrainIT.java) |
-| The producer's ordering protection cannot be switched off by tuning: a conflicting setting fails at startup | [`ProducerSettingsTest.aConflictingSettingFailsLoudly`](nostro-outbox-relay/src/test/java/io/nostro/relay/ProducerSettingsTest.java) |
-| Every Entry published twice and then replayed from offset zero is applied once, and a Tenant's Balances sum to zero at every moment | [`EntryApplyIT.publishedTwiceAndReplayedFromZero`](nostro-projection-service/src/test/java/io/nostro/projection/EntryApplyIT.java) |
-| A message the projection cannot apply halts its partition — never skipped, never dead-lettered — and the halt is a metric at once | [`EntryApplyIT.anUnappliableMessageHaltsItsPartition`](nostro-projection-service/src/test/java/io/nostro/projection/EntryApplyIT.java) |
-| The projection isolates Tenants by the same technique, over a real socket: a call without a Tenant is refused, another Tenant's Account is empty | [`BalanceServiceIT.aCallWithNoTenantIsRefused`](nostro-projection-service/src/test/java/io/nostro/projection/BalanceServiceIT.java), [`BalanceServiceIT.anotherTenantsAccountIsAnAccountWithNoPostings`](nostro-projection-service/src/test/java/io/nostro/projection/BalanceServiceIT.java), [`ProjectionIsolationIT.aCrossTenantReadReturnsNothing`](nostro-projection-service/src/test/java/io/nostro/projection/ProjectionIsolationIT.java) |
-| A read waiting for its Position holds no connection: a lagging projection under load cannot exhaust either service's pool | [`BalanceServiceIT.parkedCallsHoldNoConnection`](nostro-projection-service/src/test/java/io/nostro/projection/BalanceServiceIT.java), [`BalanceIT.aLaggingProjectionDoesNotExhaustThePool`](nostro-api-service/src/test/java/io/nostro/api/ledger/BalanceIT.java) |
-| Every API instance draws on the same per-Tenant request budget, and a throttled caller gets a Problem Detail | [`TenantRateLimiterTest.twoInstancesShareOneBudget`](nostro-api-service/src/test/java/io/nostro/api/ratelimit/TenantRateLimiterTest.java), [`RateLimitIT.aThrottledCallerGetsAProblemDetail`](nostro-api-service/src/test/java/io/nostro/api/ratelimit/RateLimitIT.java) |
-| A stored balance that disagrees with its Postings is a metric the running system raises about itself | [`ObservabilityIT.reconciliationFailureIsAMetric`](nostro-api-service/src/test/java/io/nostro/api/ObservabilityIT.java) |
-| An Entry recorded over HTTP reaches the projected Balance through every service, and there no Tenant can see or reference another's money | [`EndToEndIT.anEntryReachesTheProjectedBalance`](nostro-system-test/src/test/java/io/nostro/system/EndToEndIT.java), [`EndToEndIT.aTenantCannotSeeOrReferenceAnothersMoney`](nostro-system-test/src/test/java/io/nostro/system/EndToEndIT.java) |
+The OpenAPI document is at [`/v3/api-docs`](http://localhost:8080/v3/api-docs) and the Swagger UI is
+at [`/swagger-ui.html`](http://localhost:8080/swagger-ui.html). Both are public. Every operation needs
+a credential.
 
-Run them yourself with `./mvnw verify` (Docker required: each deployable's suite starts its own
-containers — Postgres, Kafka, Redis — and one Spring context, and tests its own seam against them;
-see [ADR-0012](docs/adr/0012-test-seams.md)). The end-to-end test runs against the compose stack:
-`docker compose up --build --wait`, then `./mvnw -Pe2e -pl nostro-system-test verify`.
+## The seeded demo
 
-Every push runs all of them on GitHub Actions, and the run's summary is this table again, ticked from
-the test reports. The table is not maintained by hand on either side: a claim whose proof is renamed,
-removed or skipped fails the build rather than quietly going unproved
-([`ci.yml`](.github/workflows/ci.yml),
-[`ReadmeClaimsTest`](nostro-api-service/src/test/java/io/nostro/api/docs/ReadmeClaimsTest.java)).
-
-## Walkthrough: from the console to a refused cross-tenant write
-
-When the API is up, the console shows:
+The console shows:
 
 ```
 ================================ demo Tenants ================================
@@ -73,7 +60,8 @@ demo-beta  tenant 2f41...
   Authorization: Bearer nk_...
 ```
 
-Copy the two keys. Each reads and writes its own Tenant's ledger and sees nothing of the other's.
+Each key reads and writes its own Tenant's ledger and sees nothing of the other's. These six
+requests go from an empty ledger to a refused cross-tenant write.
 
 ```sh
 export ALPHA='nk_...'   # demo-alpha's key
@@ -83,8 +71,8 @@ req() { curl -s -w ' [%{http_code}]
 ' "$@"; }   # curl, with the status after the body
 ```
 
-**1. Alpha opens two Accounts.** `constrained: true` declares an Account that may never go below
-zero; the declaration is permanent.
+**1. Alpha opens two Accounts.** `constrained: true` declares an Account that may never go below zero,
+and the declaration is permanent.
 
 ```sh
 req $API/accounts -H "Authorization: Bearer $ALPHA" -H 'Content-Type: application/json' \
@@ -97,31 +85,31 @@ req $API/accounts -H "Authorization: Bearer $ALPHA" -H 'Content-Type: applicatio
 ```
 
 **2. Alpha records an Entry.** Postings must sum to zero within each Currency. Amounts are decimal
-strings, never floats. The Idempotency Key is yours; present it again and you get this answer again.
+strings, never floats. The Idempotency Key is the caller's, and presenting it again returns this same
+answer.
 
 ```sh
 req $API/entries -H "Authorization: Bearer $ALPHA" -H 'Content-Type: application/json' -d '{
   "idempotencyKey": "fund-1",
   "description": "fund cash",
   "postings": [
-    {"account": "<BANK>",   "amount": {"amount": "-100.00", "currency": "USD"}},
+    {"account": "<BANK>", "amount": {"amount": "-100.00", "currency": "USD"}},
     {"account": "<CASH>", "amount": {"amount": "100.00",  "currency": "USD"}}
   ]}'
 # {"entry":"...","position":"<POSITION>"} [201]
 ```
 
-**3. Read the Balance.** It comes from the projection, which the relay feeds through Kafka, so it can
-lag the write; it reports the Position it reflects — a marker of how much of the Tenant's history the
-number includes. Pass the Position the write returned as `minPosition` and the read waits for it, up
-to a server-side cap, and answers `200` either way with the Position it actually reflects
-([ADR-0007](docs/adr/0007-balances-are-projected-and-disclose-their-position.md)).
+**3. Alpha reads the Balance.** Balances come from a separate projection service, which can lag the
+write. Each Balance reports the Position it reflects. Pass the Position the write returned as
+`minPosition` and the read waits for it, up to a server-side cap.
 
 ```sh
 req "$API/accounts/<CASH>/balance?minPosition=<POSITION>" -H "Authorization: Bearer $ALPHA"
 # {"account":"<CASH>","balance":{"amount":"100.00","currency":"USD"},"position":"<POSITION>"} [200]
 ```
 
-**4. Beta cannot see Alpha's Account.** Not forbidden — absent. A `403` would confirm it exists.
+**4. Beta cannot see Alpha's Account.** The answer is `404`, because a `403` would confirm the Account
+exists.
 
 ```sh
 req "$API/accounts/<CASH>" -H "Authorization: Bearer $BETA"
@@ -129,11 +117,10 @@ req "$API/accounts/<CASH>" -H "Authorization: Bearer $BETA"
 #  "detail":"account <CASH> is not an account of this tenant", ...} [404]
 ```
 
-**5. Beta cannot post to it either.** This is the cross-tenant write. Beta opens an Account of its
-own and tries to move money from it into Alpha's `cash`. The Entry balances; it is still refused,
-with the same answer as for an Account that does not exist at all. Beneath the API, the schema's
-composite foreign keys and row-level security would refuse the row even if the application tried
-to write it.
+**5. Beta cannot post to it either.** Beta opens an Account of its own and tries to move money from it
+into Alpha's `cash`. The Entry balances, and it is still refused with the answer an Account that does
+not exist would get. Below the API, composite foreign keys and row-level security would refuse the
+row anyway.
 
 ```sh
 req $API/accounts -H "Authorization: Bearer $BETA" -H 'Content-Type: application/json' \
@@ -144,83 +131,138 @@ req $API/entries -H "Authorization: Bearer $BETA" -H 'Content-Type: application/
   "idempotencyKey": "steal-1",
   "postings": [
     {"account": "<BETA_CASH>", "amount": {"amount": "-1.00", "currency": "USD"}},
-    {"account": "<CASH>",    "amount": {"amount": "1.00",  "currency": "USD"}}
+    {"account": "<CASH>",      "amount": {"amount": "1.00",  "currency": "USD"}}
   ]}'
 # {"type":"https://nostro.dev/problems/unknown-account", ...} [404]
 ```
 
-**6. The floor holds.** Alpha's `cash` holds 100.00 and is constrained; an Entry taking it to
--50.00 is refused as a value, and the balance is untouched.
+**6. The floor holds.** Alpha's `cash` holds 100.00 and is constrained. An Entry that would take it to
+-50.00 is refused, and the balance does not move.
 
 ```sh
 req $API/entries -H "Authorization: Bearer $ALPHA" -H 'Content-Type: application/json' -d '{
   "idempotencyKey": "overdraw-1",
   "postings": [
     {"account": "<CASH>", "amount": {"amount": "-150.00", "currency": "USD"}},
-    {"account": "<BANK>",   "amount": {"amount": "150.00",  "currency": "USD"}}
+    {"account": "<BANK>", "amount": {"amount": "150.00",  "currency": "USD"}}
   ]}'
 # {"type":"https://nostro.dev/problems/insufficient-balance", ...} [422]
 ```
 
-Every refusal is `application/problem+json` with a `type` from a closed catalog; the catalog is
-enumerated in the generated OpenAPI document at
-[`/v3/api-docs`](http://localhost:8080/v3/api-docs) (YAML at `/v3/api-docs.yaml`), browsable at
-[`/swagger-ui.html`](http://localhost:8080/swagger-ui.html). Both are public; the operations need a
-credential.
-
-## The API
+## What is here
 
 | | |
 | --- | --- |
-| `POST /v1/accounts` | Open an Account: a code unique within the Tenant, a Currency it is denominated in forever, and whether it is Constrained. |
-| `GET /v1/accounts/{id}` | The Account. |
-| `POST /v1/entries` | Record an Entry: Postings that balance within each Currency, under an Idempotency Key. Answers the Entry's id and the Position it created. |
-| `POST /v1/entries/{id}/reversal` | Record a Reversing Entry: an ordinary Entry whose Postings negate the original's, subject to every rule including the floor. At most once per Entry. |
-| `GET /v1/accounts/{id}/balance` | The Balance, from the projection, with the Position it reflects; `?minPosition=` names a Position the caller needs it to include, which is waited for up to a server-side cap and then answered `200` with whatever the Balance reflects. |
-| `GET /v1/accounts/{id}/postings` | The Account's history, newest first, keyset-paged by an opaque `cursor`. |
-| `POST /v1/auth/login` | A staff username and password for a short-lived token. |
-| `POST /v1/control/tenants`, `.../api-keys`, `.../staff-users` | The control plane ([ADR-0015](docs/adr/0015-the-control-plane-is-a-separate-authority.md)): reachable only with the bootstrap key (`NOSTRO_CONTROL_KEY` in [compose.yaml](compose.yaml)), which can reach nothing else. |
+| **Accounts** | A code unique within the Tenant, one Currency for life, and an optional floor at zero. |
+| **Entries** | Postings that must balance within each Currency, recorded in one transaction under a required Idempotency Key. |
+| **Reversals** | An ordinary Entry that negates an earlier one, at most once per Entry, and subject to the floor like any other. |
+| **Balances** | Served from a projection over gRPC, with the Position they reflect and a bounded wait for read-your-writes. |
+| **History** | An Account's Postings, newest first, paged by an opaque keyset cursor. |
+| **Auth** | Hashed API keys for machine callers and 15-minute HS256 tokens for staff. The Tenant always comes from the credential. |
+| **Control plane** | Creates Tenants and issues credentials under a separate bootstrap key, which can reach nothing else. |
+| **Errors** | RFC 9457 Problem Details for every refusal, with a `type` from a closed catalog listed in the OpenAPI document. |
+| **Rate limits** | A per-Tenant token bucket in Redis, shared by every API instance. |
+| **Observability** | Liveness and readiness probes, Prometheus metrics, one trace across the gRPC boundary, JSON logs carrying the Tenant, and a scheduled check that stored balances agree with their Postings. |
 
-Credentials are `Authorization: Bearer ...`: an API key (`nk_...`, machine callers, stored hashed) or
-a staff token (HS256, fifteen minutes). The Tenant is derived from the credential and is never a
-header, a path segment or a body field
-([ADR-0006](docs/adr/0006-the-tenant-comes-from-the-credential.md)).
+Three services, one Maven build:
 
-## How it is built
+| | |
+| --- | --- |
+| **API service** | The HTTP API. Records Entries and writes an outbox row in the same transaction. Scales out. |
+| **Outbox relay** | Exactly one instance. Drains the outbox into Kafka in Position order, keyed by Tenant. |
+| **Projection service** | Consumes Kafka into Balances in a database of its own, applies each Entry at most once, and answers the API over gRPC. |
 
-- **Three deployables**, because two replica counts conflict
-  ([ADR-0009](docs/adr/0009-three-deployables-because-two-cardinalities-conflict.md)). The **API
-  service** records Entries, writing an outbox row in each Entry's transaction, and scales out. The
-  **outbox relay** runs as exactly one instance, the single writer that drains the outbox into Kafka in
-  Position order. The **projection service** consumes Kafka into Balances in a database of its own,
-  applying each Entry at most once and halting rather than skipping one it cannot apply
-  ([ADR-0010](docs/adr/0010-the-projection-halts-rather-than-skips.md)), and answers the API service
-  over gRPC. The Balance read moved from a `SUM` over Postings to the projection without its contract
-  changing ([ADR-0007](docs/adr/0007-balances-are-projected-and-disclose-their-position.md)).
-- **The schema holds the invariants.** Composite tenant-scoped foreign keys, row-level security
-  under a request-path role that owns nothing and bypasses nothing, a `CHECK` on every Constrained
-  Account's balance, insert-only `entry` and `posting`
-  ([`V1__ledger_core.sql`](nostro-ledger-schema/src/main/resources/db/migration/V1__ledger_core.sql),
-  [ADR-0004](docs/adr/0004-the-schema-holds-the-balance-floor.md)).
-- **Recording an Entry is one transaction**: the Entry and its Postings, a guarded single-statement
-  `UPDATE` per Constrained Account in id order, the Idempotency Key record, the outbox row
-  ([`EntryWriter`](nostro-persistence/src/main/java/io/nostro/persistence/ledger/EntryWriter.java)).
-  Transient SQLSTATEs are retried from outside the transaction
-  ([`JpaEntryRecorder`](nostro-persistence/src/main/java/io/nostro/persistence/ledger/JpaEntryRecorder.java)).
-- **Outcomes are values.** Recording returns a sealed interface; an unbalanced Entry is an answer,
-  not an exception. One exhaustive switch maps every refusal to Problem Details, so an unmapped
-  refusal does not compile ([ADR-0014](docs/adr/0014-outcomes-are-values-errors-are-problem-details.md)).
-- **Java 21, Spring Boot 4, Hibernate ORM 7 through a `StatelessSession`, Flyway, Maven.**
-  Why each, and what was rejected: [ADR-0013](docs/adr/0013-spring-boot-4-on-java-21.md) and
-  [ADR-0016](docs/adr/0016-the-constraints-this-project-was-given.md).
+## The invariants, and the test that proves each
 
-## Reading
+| Claim | Proof |
+| --- | --- |
+| A cross-tenant write is refused by the schema, before any application code | [`SchemaInvariantsIT.aCrossTenantReferenceIsRefusedByTheForeignKey`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java) |
+| A cross-tenant read returns no rows, never an error that confirms the row exists | [`SchemaInvariantsIT.aCrossTenantReadReturnsNothing`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java), and over HTTP [`EntriesIT.anotherTenantsAccountIsAbsent`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java) |
+| The request-path role is not a superuser and cannot bypass row-level security | [`SchemaInvariantsIT.theRequestPathRoleBypassesNothing`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java) |
+| With no Tenant bound, reads see nothing and writes are refused | [`SchemaInvariantsIT.noTenantContextFailsClosed`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java), [`TenantContextIT.noTenantBoundFailsClosedTwice`](nostro-api-service/src/test/java/io/nostro/api/tenant/TenantContextIT.java) |
+| A valid credential for one Tenant, on a request naming another's Account, finds nothing | [`AuthenticationIT.anotherTenantsAccountIsAbsentNotForbidden`](nostro-api-service/src/test/java/io/nostro/api/auth/AuthenticationIT.java) |
+| An unbalanced Entry is refused by the domain as a value, and by the schema at `COMMIT` even from raw SQL | [`EntriesIT.anUnbalancedEntryIsRefused`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java), [`SchemaInvariantsIT.anUnbalancedEntryIsRefusedByTheSchema`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java) |
+| A Constrained Account never goes negative: 40 concurrent writers against one Account produce only floor refusals | [`RecordEntryIT.concurrentWritersToOneConstrainedAccount`](nostro-api-service/src/test/java/io/nostro/api/ledger/RecordEntryIT.java), and the `CHECK` behind the guard, [`SchemaInvariantsIT.theFloorIsACheckConstraint`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java) |
+| Writers touching two Constrained Accounts in opposite orders never deadlock | [`RecordEntryIT.oppositeOrderWritersDoNotDeadlock`](nostro-api-service/src/test/java/io/nostro/api/ledger/RecordEntryIT.java) |
+| A replayed Idempotency Key returns the first answer verbatim, and concurrent replays record once | [`EntriesIT.anIdempotencyKeyIsHonoured`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java), [`RecordEntryIT.concurrentDuplicatesRecordOnce`](nostro-api-service/src/test/java/io/nostro/api/ledger/RecordEntryIT.java) |
+| An Entry is immutable once recorded, and reversed at most once | [`SchemaInvariantsIT.entryAndPostingCannotBeUpdatedOrDeleted`](nostro-api-service/src/test/java/io/nostro/api/schema/SchemaInvariantsIT.java), [`EntriesIT.anEntryIsReversedAtMostOnce`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java) |
+| A Reversing Entry is subject to the floor, so a correction can be refused | [`EntriesIT.aReversalIsRefusedAtTheFloor`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java) |
+| An endpoint added without a permission declaration stops the application from starting | [`RequiredPermissionsTest.anUndeclaredEndpointFailsStartup`](nostro-api-service/src/test/java/io/nostro/api/auth/RequiredPermissionsTest.java) |
+| A refusal the ledger learns to express without a response mapped is a compile error | [`LedgerRefusals`](nostro-api-service/src/main/java/io/nostro/api/ledger/LedgerRefusals.java) is an exhaustive switch over a sealed type, and [`LedgerRefusalsTest`](nostro-api-service/src/test/java/io/nostro/api/ledger/LedgerRefusalsTest.java) pins each case |
+| Every refusal is an RFC 9457 body with a `type` from a closed catalog, the framework's own refusals included | [`EntriesIT.frameworkRefusalsCarryTheMalformedType`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java), [`AuthenticationIT.noCredentialIsUnauthenticated`](nostro-api-service/src/test/java/io/nostro/api/auth/AuthenticationIT.java) |
+| The whole catalog is in the generated OpenAPI document, and every endpoint is | [`OpenApiIT.everyProblemTypeAppears`](nostro-api-service/src/test/java/io/nostro/api/docs/OpenApiIT.java), [`OpenApiIT.everyHandlerIsAnOperation`](nostro-api-service/src/test/java/io/nostro/api/docs/OpenApiIT.java) |
+| Nothing in the request path borrows a second connection inside a transaction | [`TenantContextIT.nothingInTheRequestPathOpensASecondConnectionInsideATransaction`](nostro-api-service/src/test/java/io/nostro/api/tenant/TenantContextIT.java) |
+| A Tenant's Entries are published in the order they were recorded, a late committer is never overtaken, and a relay killed mid-drain loses none | [`OutboxRelayIT.aKilledLeaderIsReplacedAndNothingIsLost`](nostro-outbox-relay/src/test/java/io/nostro/relay/OutboxRelayIT.java), [`OutboxDrainIT.aLateCommitterIsNotOvertaken`](nostro-outbox-relay/src/test/java/io/nostro/relay/OutboxDrainIT.java) |
+| The producer's ordering protection cannot be switched off by tuning: a conflicting setting fails at startup | [`ProducerSettingsTest.aConflictingSettingFailsLoudly`](nostro-outbox-relay/src/test/java/io/nostro/relay/ProducerSettingsTest.java) |
+| Every Entry published twice and then replayed from offset zero is applied once, and a Tenant's Balances sum to zero at every moment | [`EntryApplyIT.publishedTwiceAndReplayedFromZero`](nostro-projection-service/src/test/java/io/nostro/projection/EntryApplyIT.java) |
+| A message the projection cannot apply halts its partition, is never skipped or dead-lettered, and the halt is a metric at once | [`EntryApplyIT.anUnappliableMessageHaltsItsPartition`](nostro-projection-service/src/test/java/io/nostro/projection/EntryApplyIT.java) |
+| The projection isolates Tenants by the same technique, over a real socket: a call without a Tenant is refused, another Tenant's Account is empty | [`BalanceServiceIT.aCallWithNoTenantIsRefused`](nostro-projection-service/src/test/java/io/nostro/projection/BalanceServiceIT.java), [`BalanceServiceIT.anotherTenantsAccountIsAnAccountWithNoPostings`](nostro-projection-service/src/test/java/io/nostro/projection/BalanceServiceIT.java), [`ProjectionIsolationIT.aCrossTenantReadReturnsNothing`](nostro-projection-service/src/test/java/io/nostro/projection/ProjectionIsolationIT.java) |
+| A read waiting for its Position holds no connection, so a lagging projection under load cannot exhaust either service's pool | [`BalanceServiceIT.parkedCallsHoldNoConnection`](nostro-projection-service/src/test/java/io/nostro/projection/BalanceServiceIT.java), [`BalanceIT.aLaggingProjectionDoesNotExhaustThePool`](nostro-api-service/src/test/java/io/nostro/api/ledger/BalanceIT.java) |
+| Every API instance draws on the same per-Tenant request budget, and a throttled caller gets a Problem Detail | [`TenantRateLimiterTest.twoInstancesShareOneBudget`](nostro-api-service/src/test/java/io/nostro/api/ratelimit/TenantRateLimiterTest.java), [`RateLimitIT.aThrottledCallerGetsAProblemDetail`](nostro-api-service/src/test/java/io/nostro/api/ratelimit/RateLimitIT.java) |
+| A stored balance that disagrees with its Postings is a metric the running system raises about itself | [`ObservabilityIT.reconciliationFailureIsAMetric`](nostro-api-service/src/test/java/io/nostro/api/ObservabilityIT.java) |
+| An Entry recorded over HTTP reaches the projected Balance through every service, and there no Tenant can see or reference another's money | [`EndToEndIT.anEntryReachesTheProjectedBalance`](nostro-system-test/src/test/java/io/nostro/system/EndToEndIT.java), [`EndToEndIT.aTenantCannotSeeOrReferenceAnothersMoney`](nostro-system-test/src/test/java/io/nostro/system/EndToEndIT.java) |
 
-- [`CONTEXT.md`](CONTEXT.md) — the domain's language: Tenant, Account, Entry, Posting, Position, and
-  the words this domain refuses to use.
-- [`docs/adr/`](docs/adr/) — sixteen decisions, each with what it rejected.
-- [`docs/research/`](docs/research/) — the notes the decisions rest on: row-level security under
-  connection pooling, hot-account contention, ordering and watermarks, Hibernate against this schema.
+[`ReadmeClaimsTest`](nostro-api-service/src/test/java/io/nostro/api/docs/ReadmeClaimsTest.java) parses
+this table and fails if a proof names a file or a method that does not exist. CI then ticks each row
+from the test reports, so a claim whose test was renamed, removed or skipped fails the build.
+
+## Conventions worth knowing before you call it
+
+- The Tenant comes from the credential. It is never a header, a path segment or a body field.
+- Another Tenant's Account answers **404, never 403**, so a status code cannot confirm it exists.
+- Amounts are decimal strings in the Account's Currency. Currencies never sum together, and the ledger
+  never converts between them.
+- `POST /v1/entries` requires an Idempotency Key. A retry gets the first response replayed verbatim.
+  The same key with a different body is a `422`.
+- A Balance always answers `200` with the Position it reflects. `minPosition` waits up to a server cap
+  and never turns lag into an error.
+- Every refusal is `application/problem+json`. Branch on `type`, never on `title` or `detail`.
+- `400` means malformed, `422` means the ledger refused it (unbalanced, floor, key reuse), and `409`
+  means a name is already taken.
+- Each Tenant gets a burst of 200 requests, refilled at 100 a second. Past that, the answer is `429`
+  with a Problem Detail.
+
+## Development
+
+```sh
+./mvnw verify -DskipITs                     # compile everything, unit tests only, no Docker
+./mvnw verify                               # every service against real Postgres, Kafka and Redis
+docker compose up --build --wait            # then the one end-to-end test, against the stack
+./mvnw -Pe2e -pl nostro-system-test verify
+nostro-load-test/run.sh                     # Gatling, by hand, results in target/load-results/
+```
+
+Tests do not mock the database. The invariants live in SQL, so a test that mocks Postgres proves
+nothing about them. Each service is tested at its own boundary against Testcontainers, with one
+Spring context per module: HTTP for the API, outbox in and Kafka out for the relay, Kafka in and gRPC
+out for the projection. One end-to-end test then follows an Entry through every service.
+
+CI never runs the load test. A throughput number from a shared runner proves nothing, so results are
+committed as dated notes under [`docs/results/`](docs/results/), each naming the machine it ran on.
+
+## Configuration
+
+Everything is environment-driven. The defaults in [`compose.yaml`](compose.yaml) are for local use,
+and each is named `dev-only-...` so nobody mistakes it for a real secret.
+
+| Variable | What it is |
+| --- | --- |
+| `NOSTRO_DB_OWNER_PASSWORD` | The ledger database's owner, used only by migrations |
+| `NOSTRO_APP_PASSWORD` | `nostro_app`, the request-path role, which owns nothing and bypasses no policy |
+| `NOSTRO_CONTROL_PASSWORD` | `nostro_control`, the control plane's role |
+| `NOSTRO_RELAY_PASSWORD` | `nostro_relay`, the outbox relay's role |
+| `NOSTRO_PROJECTION_PASSWORD` | `nostro_projection`, the projection service's role in its own database |
+| `NOSTRO_JWT_SECRET` | Signs staff tokens (HS256, at least 32 bytes) |
+| `NOSTRO_CONTROL_KEY` | The control plane's bootstrap key, `nc_` plus at least 32 bytes |
+| `NOSTRO_SEED_DEMO_TENANTS` | `true` seeds the two demo Tenants at startup |
+
+Migrations run as their own compose jobs with the owner credential, before any service starts, and no
+service is given that credential. Each service serves `/actuator/health/liveness`,
+`/actuator/health/readiness` and `/actuator/prometheus` on its management port.
+
+Nothing here deploys. There is no Kubernetes or cloud configuration, by decision
+([ADR-0016](docs/adr/0016-the-constraints-this-project-was-given.md)). The problems worth showing are
+in the schema, the concurrency and the service boundaries, and none of them needs a cluster.
 
 ## Modules
 
@@ -228,13 +270,23 @@ header, a path segment or a body field
 | --- | --- |
 | [`nostro-domain`](nostro-domain/) | Pure Java: `Money`, `Entry`, `Posting`, `Position`, the sealed `RecordOutcome`, and the `EntryRecorder` and `BalanceReader` ports. Depends on the JDK alone. |
 | [`nostro-ledger-schema`](nostro-ledger-schema/) | The ledger database's Flyway migrations, and nothing else. |
-| [`nostro-outbox`](nostro-outbox/) | The contract between the deployables: the `EntryRecorded` message, and the topic it travels on. |
+| [`nostro-outbox`](nostro-outbox/) | The contract between the services: the `EntryRecorded` message and its topic. |
 | [`nostro-persistence`](nostro-persistence/) | The JPA mapping, the Tenant context hook, the Entry writer and the reads. |
-| [`nostro-balance-proto`](nostro-balance-proto/) | The gRPC contract between the API service and the projection: one `.proto`, and the stubs generated from it. |
-| [`nostro-grpc-common`](nostro-grpc-common/) | How the Tenant crosses a gRPC boundary: one metadata key, and the interceptors that write and read it. |
-| [`nostro-api-service`](nostro-api-service/) | The HTTP API: authentication, the control plane, the controllers, the error model, the OpenAPI document; a gRPC client of the projection. |
-| [`nostro-outbox-relay`](nostro-outbox-relay/) | The single-writer relay that drains the outbox into Kafka, in Position order. |
-| [`nostro-projection-service`](nostro-projection-service/) | Consumes Entries into Balances in a database of its own, at most once each, halting rather than skipping. |
-| [`nostro-test-support`](nostro-test-support/) | The suites' singleton containers: the ledger's Postgres, the projection's Postgres, Kafka, Redis. |
-| [`nostro-system-test`](nostro-system-test/) | The one end-to-end test, over HTTP against the compose stack (`-Pe2e`). |
-| [`nostro-load-test`](nostro-load-test/) | Gatling, two arms, run by hand against the stack (`-Pload-test`); results in [`docs/results/`](docs/results/). |
+| [`nostro-balance-proto`](nostro-balance-proto/) | The gRPC contract between the API and the projection, and the stubs generated from it. |
+| [`nostro-grpc-common`](nostro-grpc-common/) | How the Tenant crosses a gRPC boundary: one metadata key and the interceptors that write and read it. |
+| [`nostro-api-service`](nostro-api-service/) | The HTTP API, authentication, the control plane, the error model and the OpenAPI document. |
+| [`nostro-outbox-relay`](nostro-outbox-relay/) | The single-writer relay from the outbox to Kafka. |
+| [`nostro-projection-service`](nostro-projection-service/) | Balances in a database of its own, applied at most once, halting rather than skipping. |
+| [`nostro-test-support`](nostro-test-support/) | The shared Testcontainers: both Postgres servers, Kafka and Redis. |
+| [`nostro-system-test`](nostro-system-test/) | The one end-to-end test, over HTTP against the compose stack. |
+| [`nostro-load-test`](nostro-load-test/) | Gatling, two arms, run by hand. |
+
+## Where the reasoning is
+
+Each decision behind the awkward parts is one file in [`docs/adr/`](docs/adr/), with the options it
+rejected: why the balance floor is a `CHECK` constraint, why the relay is a single writer, why the
+projection halts instead of dead-lettering, and why there is no circuit breaker and no cache.
+[`CONTEXT.md`](CONTEXT.md) is the vocabulary the code is written in, including the words it refuses to
+use. [`docs/research/`](docs/research/) holds the source-cited notes those decisions rest on:
+row-level security under connection pooling, hot-account contention, ordering and watermarks, and
+Hibernate against an insert-only schema.
