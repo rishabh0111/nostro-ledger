@@ -196,6 +196,24 @@ class BalanceIT extends LedgerIntegrationTest {
         assertThat(balance(key, cash).get("balance").get("amount").asString()).isEqualTo("0.00");
     }
 
+    @Test
+    @DisplayName("a projection too slow to answer in time is asked again: a Balance read has no effect to duplicate, so one slow answer is not a 503")
+    void aSlowAnswerIsRetried() throws Exception {
+        var tenant = newTenant();
+        var key = newApiKey(tenant, Permission.LEDGER_READ, Permission.LEDGER_WRITE);
+        var cash = new AccountId(openAccount(key, "cash"));
+        var bank = new AccountId(openAccount(key, "bank"));
+        recordEntry(tenant, bank, cash, 900);
+        int before = projection().callers().size();
+        projection().slowDown(tenant.value(), 1);
+        try {
+            assertThat(balance(key, cash).get("balance").get("amount").asString()).isEqualTo("9.00");
+        } finally {
+            projection().recover(tenant.value());
+        }
+        assertThat(projection().callers().size() - before).as("attempts").isEqualTo(2);
+    }
+
     // -- helpers ---------------------------------------------------------------------------------
 
     private JsonNode balanceAtLeast(ApiKey key, AccountId account, Position minimum) throws Exception {

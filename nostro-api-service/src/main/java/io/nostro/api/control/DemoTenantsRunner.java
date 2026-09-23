@@ -1,8 +1,6 @@
 package io.nostro.api.control;
 
 import io.nostro.api.ApiVersion;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -17,8 +15,6 @@ import org.springframework.stereotype.Component;
 @Component
 @ConditionalOnProperty(name = "nostro.control.seed-demo-tenants", havingValue = "true")
 class DemoTenantsRunner implements ApplicationRunner {
-
-    private static final Logger log = LoggerFactory.getLogger(DemoTenantsRunner.class);
 
     private final DemoTenants demoTenants;
 
@@ -40,6 +36,8 @@ class DemoTenantsRunner implements ApplicationRunner {
         banner.append('\n')
                 .append("Each key reads and writes its own Tenant's ledger and sees nothing of the other's.\n")
                 .append("==============================================================================\n");
-        log.info("{}", banner);
+        // Printed, not logged: it is for the person at the console, and the logs are JSON for machines.
+        System.out.print(banner);
+        System.out.flush();
     }
 }

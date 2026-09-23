@@ -3,7 +3,6 @@ package io.nostro.api.control;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Component;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -16,36 +15,45 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * @Transactional} boundary.
  *
  * <p>Small: two connections is plenty for a surface that is used to set up callers, not to serve
- * them. Hikari connects at construction, and the role it connects as is created by the first
- * migration, so on a fresh database this pool must be built after Flyway has run: declared, not
- * left to bean-scan order.
+ * them. Built at first use rather than at startup: Hikari connects when it is built, and the role
+ * it connects as is created by the first migration — which runs in this process under test, and in
+ * a migration container beforehand under compose. Either way it has run by the time anything asks.
  */
 @Component
-@DependsOn("flywayInitializer")
 @EnableConfigurationProperties(ControlProperties.class)
 class ControlPlaneDatabase implements AutoCloseable {
 
-    private final HikariDataSource pool;
+    private final ControlProperties properties;
+    private HikariDataSource pool;
 
     ControlPlaneDatabase(ControlProperties properties) {
-        var config = new HikariConfig();
-        config.setPoolName("nostro-control");
-        config.setJdbcUrl(properties.datasource().url());
-        config.setUsername(properties.datasource().username());
-        config.setPassword(properties.datasource().password());
-        config.setMaximumPoolSize(2);
-        // Visible in pg_stat_activity, so that which role the control plane connects as is observable from outside.
-        config.addDataSourceProperty("ApplicationName", "nostro-control");
-        this.pool = new HikariDataSource(config);
+        this.properties = properties;
     }
 
     /** A client over the control-plane pool. Outside a transaction, each statement borrows and returns a connection. */
     JdbcClient jdbc() {
-        return JdbcClient.create(pool);
+        return JdbcClient.create(pool());
+    }
+
+    private synchronized HikariDataSource pool() {
+        if (pool == null) {
+            var config = new HikariConfig();
+            config.setPoolName("nostro-control");
+            config.setJdbcUrl(properties.datasource().url());
+            config.setUsername(properties.datasource().username());
+            config.setPassword(properties.datasource().password());
+            config.setMaximumPoolSize(2);
+            // Visible in pg_stat_activity, so that which role the control plane connects as is observable from outside.
+            config.addDataSourceProperty("ApplicationName", "nostro-control");
+            pool = new HikariDataSource(config);
+        }
+        return pool;
     }
 
     @Override
-    public void close() {
-        pool.close();
+    public synchronized void close() {
+        if (pool != null) {
+            pool.close();
+        }
     }
 }

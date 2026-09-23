@@ -1,13 +1,38 @@
-# `docker compose up` is the whole first run (ADR-0006, ADR-0015): Postgres and the API service,
-# and when the service is up it has seeded two demo Tenants and printed their credentials to this
-# console. Every secret below has a dev-only default so there is nothing to configure; set the
-# variables in the environment or a .env file to override them. None of these defaults is fit for
-# anything but this stack.
+# `docker compose up --build` is the whole first run: the ledger's Postgres and the projection's,
+# Kafka in KRaft mode, Redis, a migration container per database, and the three deployables
+# (ADR-0009). When the API service is up it has seeded two demo Tenants and printed their
+# credentials to this console. Every secret below has a dev-only default so there is nothing to
+# configure; set the variables in the environment or a .env file to override them. None of these
+# defaults is fit for anything but this stack.
 #
-# depends_on is the long form with a healthcheck: the short form is start order, not readiness,
-# and the API's migrations would race the database.
+# Three things break a stranger's first run of an arrangement like this, and each is handled here
+# (docs/research/grpc-and-multi-module-layout.md section 8):
+#
+#   - A Dockerfile that copies a jar nobody built. The Dockerfile builds the reactor itself.
+#   - Short-form depends_on, which is start order and not readiness. Every dependency below is the
+#     long form, on a real healthcheck, or on a migration having completed.
+#   - Migrations racing, or not running. Each database is migrated by its own short-lived container,
+#     exactly once, before anything that uses it starts; the services run with Flyway off. The
+#     projection's database is a second Postgres, not forgotten and not a schema in the first.
+#
+# Published to the host: the API on 8080 and nothing else. The projection's gRPC port is reachable
+# only from the API service, which is what lets the projection trust the Tenant in a call's metadata
+# (docs/research/grpc-and-multi-module-layout.md section 6); management ports are for healthchecks.
+
+x-ledger-owner: &ledger-owner
+  NOSTRO_DB_URL: jdbc:postgresql://ledger-db:5432/nostro
+x-java-healthcheck: &java-healthcheck
+  interval: 3s
+  timeout: 3s
+  retries: 40
+  start_period: 20s
+  start_interval: 2s
+
 services:
-  postgres:
+
+  # -- backing services -------------------------------------------------------------------------
+
+  ledger-db:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: nostro
@@ -20,25 +45,158 @@ services:
       timeout: 2s
       retries: 30
 
+  # The projection's own database (ADR-0008): a second server, so it has no connection to the
+  # ledger's even by accident, and a system_identifier of its own.
+  projection-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nostro_projection
+      POSTGRES_USER: nostro
+      POSTGRES_PASSWORD: ${NOSTRO_PROJECTION_DB_OWNER_PASSWORD:-dev-only-projection-owner-password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nostro -d nostro_projection"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  # One broker in KRaft mode. Topics are never created implicitly: the Entries topic's partition
+  # count is schema, and the relay creates it, or refuses to start against another count.
+  kafka:
+    image: apache/kafka:4.2.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 15s
+      start_interval: 2s
+
+  # Per-Tenant rate limits, and nothing else (ADR-0008).
+  redis:
+    image: redis:7.4-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  # -- migrations, exactly once per database ----------------------------------------------------
+
+  ledger-migrate:
+    build:
+      context: .
+      target: ledger-migrate
+    command: migrate
+    environment:
+      FLYWAY_URL: jdbc:postgresql://ledger-db:5432/nostro
+      FLYWAY_USER: nostro
+      FLYWAY_PASSWORD: ${NOSTRO_DB_OWNER_PASSWORD:-dev-only-owner-password}
+      # The roles the migrations create: the request path, the control plane (ADR-0015), the relay.
+      FLYWAY_PLACEHOLDERS_APP_PASSWORD: ${NOSTRO_APP_PASSWORD:-dev-only-app-password}
+      FLYWAY_PLACEHOLDERS_CONTROL_PASSWORD: ${NOSTRO_CONTROL_PASSWORD:-dev-only-control-password}
+      FLYWAY_PLACEHOLDERS_RELAY_PASSWORD: ${NOSTRO_RELAY_PASSWORD:-dev-only-relay-password}
+    depends_on:
+      ledger-db:
+        condition: service_healthy
+    # The default, written out: a failed migration must stop what depends on it, not loop.
+    restart: "no"
+
+  projection-migrate:
+    build:
+      context: .
+      target: projection-migrate
+    command: migrate
+    environment:
+      FLYWAY_URL: jdbc:postgresql://projection-db:5432/nostro_projection
+      FLYWAY_USER: nostro
+      FLYWAY_PASSWORD: ${NOSTRO_PROJECTION_DB_OWNER_PASSWORD:-dev-only-projection-owner-password}
+      FLYWAY_PLACEHOLDERS_PROJECTION_PASSWORD: ${NOSTRO_PROJECTION_PASSWORD:-dev-only-projection-password}
+    depends_on:
+      projection-db:
+        condition: service_healthy
+    restart: "no"
+
+  # -- the three deployables (ADR-0009) ---------------------------------------------------------
+
+  # Exactly one instance: the ordering it provides needs a single writer. It creates the Entries
+  # topic, with its twelve partitions, before it reports ready.
+  relay:
+    build:
+      context: .
+      target: relay
+    environment:
+      <<: *ledger-owner
+      NOSTRO_RELAY_PASSWORD: ${NOSTRO_RELAY_PASSWORD:-dev-only-relay-password}
+      NOSTRO_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      ledger-migrate:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      <<: *java-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:8081/actuator/health/readiness"]
+
+  # Ready only once its context has started, which is after its gRPC server and its consumer have.
+  projection:
+    build:
+      context: .
+      target: projection
+    environment:
+      NOSTRO_PROJECTION_DB_URL: jdbc:postgresql://projection-db:5432/nostro_projection
+      NOSTRO_PROJECTION_PASSWORD: ${NOSTRO_PROJECTION_PASSWORD:-dev-only-projection-password}
+      NOSTRO_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_FLYWAY_ENABLED: "false"
+    depends_on:
+      projection-migrate:
+        condition: service_completed_successfully
+      # The relay has created the topic by the time it is ready; the projection subscribes to it.
+      relay:
+        condition: service_healthy
+    healthcheck:
+      <<: *java-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:8082/actuator/health/readiness"]
+
   api:
     build:
       context: .
-      dockerfile: nostro-api-service/Dockerfile
-    depends_on:
-      postgres:
-        condition: service_healthy
+      target: api
     environment:
-      NOSTRO_DB_URL: jdbc:postgresql://postgres:5432/nostro
-      NOSTRO_DB_OWNER: nostro
-      NOSTRO_DB_OWNER_PASSWORD: ${NOSTRO_DB_OWNER_PASSWORD:-dev-only-owner-password}
-      # The roles the migrations create: the request path, the control plane (ADR-0015), the relay.
+      <<: *ledger-owner
       NOSTRO_APP_PASSWORD: ${NOSTRO_APP_PASSWORD:-dev-only-app-password}
       NOSTRO_CONTROL_PASSWORD: ${NOSTRO_CONTROL_PASSWORD:-dev-only-control-password}
-      NOSTRO_RELAY_PASSWORD: ${NOSTRO_RELAY_PASSWORD:-dev-only-relay-password}
       NOSTRO_JWT_SECRET: ${NOSTRO_JWT_SECRET:-dev-only-staff-token-signing-secret-of-32-bytes}
-      # The control plane's bootstrap credential: `Authorization: Bearer <this>` on /control/... .
+      # The control plane's bootstrap credential: `Authorization: Bearer <this>` on /v1/control/... .
       NOSTRO_CONTROL_KEY: ${NOSTRO_CONTROL_KEY:-nc_dev-only-control-key-change-before-any-deploy}
+      NOSTRO_PROJECTION_GRPC_TARGET: static://projection:9090
+      NOSTRO_REDIS_URI: redis://redis:6379
       # Seeds demo-alpha and demo-beta at startup and prints their keys. Only here.
       NOSTRO_SEED_DEMO_TENANTS: "true"
+      SPRING_FLYWAY_ENABLED: "false"
+      # Health and metrics on a port published nowhere; 8080 serves the API alone.
+      MANAGEMENT_SERVER_PORT: "8081"
+    depends_on:
+      ledger-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      projection:
+        condition: service_healthy
+    healthcheck:
+      <<: *java-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:8081/actuator/health/readiness"]
     ports:
       - "8080:8080"

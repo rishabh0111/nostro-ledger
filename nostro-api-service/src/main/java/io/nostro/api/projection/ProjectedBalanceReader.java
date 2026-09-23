@@ -46,6 +46,13 @@ class ProjectedBalanceReader implements BalanceReader {
     private static final Set<Status.Code> UNAVAILABLE = Set.of(
             Status.Code.UNAVAILABLE, Status.Code.DEADLINE_EXCEEDED, Status.Code.RESOURCE_EXHAUSTED);
 
+    /**
+     * The statuses worth another attempt. A Balance read has no effect to duplicate, so a call that
+     * ran out of time is as safe to repeat as one that never connected; the first read after a cold
+     * start is the usual case, when both JVMs are still loading the call path.
+     */
+    private static final Set<Status.Code> RETRYABLE = Set.of(Status.Code.UNAVAILABLE, Status.Code.DEADLINE_EXCEEDED);
+
     private final Accounts accounts;
     private final BalanceServiceGrpc.BalanceServiceBlockingStub projection;
     private final Installation installation;
@@ -84,7 +91,7 @@ class ProjectedBalanceReader implements BalanceReader {
         return Optional.of(new Balance(id, Money.ofMinor(answer.getAmountMinor(), currency), reflected));
     }
 
-    /** Asks, with a deadline, retrying only {@code UNAVAILABLE}: the one status that promises nothing was done. */
+    /** Asks, with a deadline on each attempt, retrying {@link #RETRYABLE} a bounded number of times (ADR-0011). */
     private GetBalanceResponse ask(GetBalanceRequest request) {
         var backoff = properties.retryBackoff();
         for (int attempt = 1; ; attempt++) {
@@ -92,7 +99,7 @@ class ProjectedBalanceReader implements BalanceReader {
                 return projection.withDeadlineAfter(properties.deadline().toMillis(), TimeUnit.MILLISECONDS).getBalance(request);
             } catch (StatusRuntimeException failed) {
                 var code = failed.getStatus().getCode();
-                if (code == Status.Code.UNAVAILABLE && attempt < properties.attempts()) {
+                if (RETRYABLE.contains(code) && attempt < properties.attempts()) {
                     log.warn("the projection was {} for a Balance; attempt {} of {}", code, attempt, properties.attempts());
                     pause(backoff);
                     backoff = backoff.multipliedBy(2);

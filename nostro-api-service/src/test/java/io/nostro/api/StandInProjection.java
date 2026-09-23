@@ -28,6 +28,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
@@ -53,6 +54,7 @@ public final class StandInProjection extends BalanceServiceGrpc.BalanceServiceIm
     private volatile Long installation;
     private final Map<UUID, Long> stalledAt = new ConcurrentHashMap<>();
     private final Set<UUID> unreachable = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Integer> slowCalls = new ConcurrentHashMap<>();
     private final List<UUID> callers = new CopyOnWriteArrayList<>();
     private final List<String> traceparents = new CopyOnWriteArrayList<>();
     private final Server server;
@@ -92,10 +94,16 @@ public final class StandInProjection extends BalanceServiceGrpc.BalanceServiceIm
         unreachable.add(tenant);
     }
 
+    /** The Tenant's next {@code calls} calls answer only after the caller's deadline has passed, as a cold server's might. */
+    public void slowDown(UUID tenant, int calls) {
+        slowCalls.put(tenant, calls);
+    }
+
     /** Undoes both switches for the Tenant. */
     public void recover(UUID tenant) {
         stalledAt.remove(tenant);
         unreachable.remove(tenant);
+        slowCalls.remove(tenant);
     }
 
     @Override
@@ -105,6 +113,9 @@ public final class StandInProjection extends BalanceServiceGrpc.BalanceServiceIm
         if (unreachable.contains(tenant)) {
             response.onError(Status.UNAVAILABLE.withDescription("the stand-in projection is down for this Tenant").asRuntimeException());
             return;
+        }
+        if (takeASlowCall(tenant)) {
+            sleepPastTheDeadline();
         }
         long watermark = Optional.ofNullable(stalledAt.get(tenant)).orElseGet(() -> newest(tenant));
         if (!request.getMinPosition().isEmpty() && Position.parse(request.getMinPosition()).orElseThrow().xid8() > watermark) {
@@ -141,6 +152,27 @@ public final class StandInProjection extends BalanceServiceGrpc.BalanceServiceIm
                 .optional()
                 .map(Long::parseUnsignedLong)
                 .orElse(0L);
+    }
+
+    /** Whether this call is one of the slow ones asked for, counting it off if so. */
+    private boolean takeASlowCall(UUID tenant) {
+        var taken = new AtomicBoolean();
+        slowCalls.computeIfPresent(tenant, (t, left) -> {
+            taken.set(true);
+            return left > 1 ? left - 1 : null;
+        });
+        return taken.get();
+    }
+
+    private static void sleepPastTheDeadline() {
+        long wait = Optional.ofNullable(Context.current().getDeadline())
+                .map(deadline -> deadline.timeRemaining(TimeUnit.MILLISECONDS) + 200)
+                .orElse(MAX_WAIT.toMillis());
+        try {
+            Thread.sleep(wait);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static void parkUntilCapOrDeadline() {

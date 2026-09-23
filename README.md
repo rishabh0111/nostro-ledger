@@ -12,9 +12,11 @@ each has a test that would fail if it broke.
 docker compose up --build
 ```
 
-That is the whole first run: Postgres and the API on `localhost:8080`, two demo Tenants seeded, their
-API keys printed to the console. Nothing to sign up for, nothing to configure. The walkthrough below
-goes from there to a refused cross-tenant write in six requests.
+That is the whole first run: two Postgres servers (the ledger's and the projection's), Kafka, Redis, a
+migration container for each database, and the three services — the API on `localhost:8080`, the
+outbox relay, the projection. When it is up, two demo Tenants are seeded and their API keys printed to
+the console. Nothing to sign up for, nothing to configure. The walkthrough below goes from there to a
+refused cross-tenant write in six requests.
 
 ## The invariants, and the test that proves each
 
@@ -95,16 +97,18 @@ req $API/entries -H "Authorization: Bearer $ALPHA" -H 'Content-Type: application
     {"account": "<BANK>",   "amount": {"amount": "-100.00", "currency": "USD"}},
     {"account": "<CASH>", "amount": {"amount": "100.00",  "currency": "USD"}}
   ]}'
-# {"entry":"...","position":"7318...:00000000000000000812"} [201]
+# {"entry":"...","position":"<POSITION>"} [201]
 ```
 
-**3. Read the Balance.** It reports the Position it reflects — a marker of how much of the Tenant's
-history the number includes — so a caller who just recorded an Entry can tell whether a read has
-caught up ([ADR-0007](docs/adr/0007-balances-are-projected-and-disclose-their-position.md)).
+**3. Read the Balance.** It comes from the projection, which the relay feeds through Kafka, so it can
+lag the write; it reports the Position it reflects — a marker of how much of the Tenant's history the
+number includes. Pass the Position the write returned as `minPosition` and the read waits for it, up
+to a server-side cap, and answers `200` either way with the Position it actually reflects
+([ADR-0007](docs/adr/0007-balances-are-projected-and-disclose-their-position.md)).
 
 ```sh
-req "$API/accounts/<CASH>/balance" -H "Authorization: Bearer $ALPHA"
-# {"account":"<CASH>","balance":{"amount":"100.00","currency":"USD"},"position":"..."} [200]
+req "$API/accounts/<CASH>/balance?minPosition=<POSITION>" -H "Authorization: Bearer $ALPHA"
+# {"account":"<CASH>","balance":{"amount":"100.00","currency":"USD"},"position":"<POSITION>"} [200]
 ```
 
 **4. Beta cannot see Alpha's Account.** Not forbidden — absent. A `403` would confirm it exists.
@@ -174,10 +178,15 @@ header, a path segment or a body field
 
 ## How it is built
 
-- **One deployable and Postgres** in this milestone; the outbox table is written on every Entry and
-  nothing drains it yet. The second milestone adds a
-  projection service and a relay, fed by that outbox, and swaps the Balance read's implementation
-  without changing its contract ([ADR-0009](docs/adr/0009-three-deployables-because-two-cardinalities-conflict.md)).
+- **Three deployables**, because two replica counts conflict
+  ([ADR-0009](docs/adr/0009-three-deployables-because-two-cardinalities-conflict.md)). The **API
+  service** records Entries, writing an outbox row in each Entry's transaction, and scales out. The
+  **outbox relay** runs as exactly one instance, the single writer that drains the outbox into Kafka in
+  Position order. The **projection service** consumes Kafka into Balances in a database of its own,
+  applying each Entry at most once and halting rather than skipping one it cannot apply
+  ([ADR-0010](docs/adr/0010-the-projection-halts-rather-than-skips.md)), and answers the API service
+  over gRPC. The Balance read moved from a `SUM` over Postings to the projection without its contract
+  changing ([ADR-0007](docs/adr/0007-balances-are-projected-and-disclose-their-position.md)).
 - **The schema holds the invariants.** Composite tenant-scoped foreign keys, row-level security
   under a request-path role that owns nothing and bypasses nothing, a `CHECK` on every Constrained
   Account's balance, insert-only `entry` and `posting`
