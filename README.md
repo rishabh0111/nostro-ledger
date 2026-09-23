@@ -162,7 +162,7 @@ credential.
 | `GET /v1/accounts/{id}` | The Account. |
 | `POST /v1/entries` | Record an Entry: Postings that balance within each Currency, under an Idempotency Key. Answers the Entry's id and the Position it created. |
 | `POST /v1/entries/{id}/reversal` | Record a Reversing Entry: an ordinary Entry whose Postings negate the original's, subject to every rule including the floor. At most once per Entry. |
-| `GET /v1/accounts/{id}/balance` | The Balance, with the Position it reflects; `?minPosition=` names the Position the caller needs it to include. |
+| `GET /v1/accounts/{id}/balance` | The Balance, from the projection, with the Position it reflects; `?minPosition=` names a Position the caller needs it to include, which is waited for up to a server-side cap and then answered `200` with whatever the Balance reflects. |
 | `GET /v1/accounts/{id}/postings` | The Account's history, newest first, keyset-paged by an opaque `cursor`. |
 | `POST /v1/auth/login` | A staff username and password for a short-lived token. |
 | `POST /v1/control/tenants`, `.../api-keys`, `.../staff-users` | The control plane ([ADR-0015](docs/adr/0015-the-control-plane-is-a-separate-authority.md)): reachable only with the bootstrap key (`NOSTRO_CONTROL_KEY` in [compose.yaml](compose.yaml)), which can reach nothing else. |
@@ -211,7 +211,9 @@ header, a path segment or a body field
 | [`nostro-ledger-schema`](nostro-ledger-schema/) | The ledger database's Flyway migrations, and nothing else. |
 | [`nostro-outbox`](nostro-outbox/) | The contract between the deployables: the `EntryRecorded` message, and the topic it travels on. |
 | [`nostro-persistence`](nostro-persistence/) | The JPA mapping, the Tenant context hook, the Entry writer and the reads. |
-| [`nostro-api-service`](nostro-api-service/) | The HTTP API: authentication, the control plane, the controllers, the error model, the OpenAPI document. The one executable. |
+| [`nostro-balance-proto`](nostro-balance-proto/) | The gRPC contract between the API service and the projection: one `.proto`, and the stubs generated from it. |
+| [`nostro-grpc-common`](nostro-grpc-common/) | How the Tenant crosses a gRPC boundary: one metadata key, and the interceptors that write and read it. |
+| [`nostro-api-service`](nostro-api-service/) | The HTTP API: authentication, the control plane, the controllers, the error model, the OpenAPI document; a gRPC client of the projection. |
 | [`nostro-outbox-relay`](nostro-outbox-relay/) | The single-writer relay that drains the outbox into Kafka, in Position order. |
 | [`nostro-projection-service`](nostro-projection-service/) | Consumes Entries into Balances in a database of its own, at most once each, halting rather than skipping. |
 | [`nostro-test-support`](nostro-test-support/) | The suite's singleton containers: the ledger's Postgres, the projection's Postgres, Kafka. |

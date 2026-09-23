@@ -1,4 +1,9 @@
 spring:
+  # For Boot's own executors. The gRPC server ignores this; ProjectionConfiguration gives it virtual threads itself.
+  threads:
+    virtual:
+      enabled: true
+
   application:
     name: nostro-projection
 
@@ -17,7 +22,17 @@ spring:
     placeholders:
       projection_password: ${NOSTRO_PROJECTION_PASSWORD}
 
+  # gRPC on 9090, published to nothing beyond the compose network: the Tenant in the call's
+  # metadata is trusted because only the API service can reach this port
+  # (docs/research/grpc-and-multi-module-layout.md section 6).
+  grpc:
+    server:
+      port: ${NOSTRO_PROJECTION_GRPC_PORT:9090}
+
 nostro:
   projection:
     kafka:
       bootstrap-servers: ${NOSTRO_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    balance:
+      # The server's cap on a read waiting for its minimum Position (ADR-0007). An estimate.
+      max-wait: 1s

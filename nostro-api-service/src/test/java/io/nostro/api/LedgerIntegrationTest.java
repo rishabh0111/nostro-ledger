@@ -65,12 +65,24 @@ public abstract class LedgerIntegrationTest {
     /** The bootstrap credential the control plane is configured with, for this suite only (ADR-0015). */
     protected static final String CONTROL_KEY = "nc_test-only-bootstrap-key-of-at-least-32-bytes";
 
+    private static StandInProjection projection;
+
     @DynamicPropertySource
     static void ledgerDatabase(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
         registry.add("spring.flyway.user", POSTGRES::getUsername);
         registry.add("spring.flyway.password", POSTGRES::getPassword);
+        registry.add("spring.grpc.client.channel.projection.target", () -> "static://localhost:" + projection().port());
+    }
+
+    /** The projection the API service talks to in these tests: a stand-in on a real port, one for the suite (ADR-0012). */
+    protected static synchronized StandInProjection projection() {
+        if (projection == null) {
+            projection = new StandInProjection(JdbcClient.create(
+                    new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())));
+        }
+        return projection;
     }
 
     @Autowired

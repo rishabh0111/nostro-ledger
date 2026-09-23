@@ -11,6 +11,8 @@ COPY nostro-outbox nostro-outbox
 COPY nostro-outbox-relay nostro-outbox-relay
 COPY nostro-projection-service nostro-projection-service
 COPY nostro-persistence nostro-persistence
+COPY nostro-balance-proto nostro-balance-proto
+COPY nostro-grpc-common nostro-grpc-common
 COPY nostro-test-support nostro-test-support
 COPY nostro-api-service nostro-api-service
 # A Windows checkout may carry CRLF in the wrapper script; the JVM does not care, sh does.

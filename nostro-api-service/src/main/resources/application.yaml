@@ -5,6 +5,15 @@ spring:
     virtual:
       enabled: true
 
+  # The projection, over gRPC, for Balances (ADR-0008). Its port is published to nothing beyond the
+  # compose network: the Tenant in each call's metadata is trusted because only this service can
+  # reach it (docs/research/grpc-and-multi-module-layout.md section 6).
+  grpc:
+    client:
+      channel:
+        projection:
+          target: ${NOSTRO_PROJECTION_GRPC_TARGET:static://localhost:9090}
+
   # The request path connects as nostro_app: not the owner, no BYPASSRLS, and holding only the
   # grants the migration gives it. Connecting as anything else silently bypasses every policy
   # (docs/research/rls-pooling.md section 3).

@@ -1,0 +1,39 @@
+// How the API service asks the projection service for a Balance (ADR-0008): internal, typed, and
+// carrying back the Position the answer reflects (ADR-0007).
+//
+// The Tenant is not a field of any message here. It travels in call metadata, under
+// x-nostro-tenant, written by one client interceptor and read by one server interceptor
+// (nostro-grpc-common). A field would be one more thing every new RPC has to remember, and a
+// GetBalance(tenant, account) invites someone to pass a Tenant that is not the caller's.
+syntax = "proto3";
+
+package nostro.balance.v1;
+
+option java_multiple_files = true;
+option java_package = "io.nostro.balance.v1";
+option java_outer_classname = "BalanceProto";
+
+service BalanceService {
+  // The Balance of one of the calling Tenant's Accounts, as projected, and the Position it reflects.
+  //
+  // With a min_position, the server waits for its watermark to reach it, for as long as the server
+  // allows and the call's deadline leaves, and then answers with whatever it reflects. It never
+  // refuses for lag: the caller compares the Position that comes back.
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+}
+
+message GetBalanceRequest {
+  // The Account, a UUID.
+  string account_id = 1;
+  // A Position token the answer should include; empty for no minimum.
+  string min_position = 2;
+}
+
+message GetBalanceResponse {
+  // The Balance, in the Account's smallest unit. Zero when no Posting has reached the Account.
+  int64 amount_minor = 1;
+  // The Account's Currency as the projection learned it from a Posting; empty when none has.
+  string currency = 2;
+  // The Position token of the Tenant's watermark; empty when nothing of the Tenant's is applied.
+  string position = 3;
+}

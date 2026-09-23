@@ -49,6 +49,24 @@
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
     </dependency>
+    <!-- The gRPC side: the contract, the Tenant interceptors, a Netty server, and the standard
+         health service, which compose's healthcheck asks (grpc-services is optional in Spring gRPC). -->
+    <dependency>
+      <groupId>io.nostro</groupId>
+      <artifactId>nostro-balance-proto</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.nostro</groupId>
+      <artifactId>nostro-grpc-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-grpc-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-services</artifactId>
+    </dependency>
     <!-- A halted partition is a metric the moment it happens (ADR-0010). -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -63,6 +81,11 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-grpc-test</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

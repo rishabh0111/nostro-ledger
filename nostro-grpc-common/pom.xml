@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.nostro</groupId>
+    <artifactId>nostro-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>nostro-grpc-common</artifactId>
+  <name>Nostro :: gRPC Common</name>
+  <description>How the Tenant crosses a gRPC boundary: the metadata key, and the interceptors that write and read it.</description>
+
+  <!--
+    About any call, not about the Balance service: it depends on grpc-api and nothing of ours, not
+    even the domain, so the interceptors that are the Tenant's boundary live in one place with their
+    own tests (docs/research/grpc-and-multi-module-layout.md section 3).
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-api</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-stub</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- A real transport, over a real socket: in-process skips metadata serialization by default,
+         and metadata is exactly what these tests are about (ADR-0012). -->
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-netty</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

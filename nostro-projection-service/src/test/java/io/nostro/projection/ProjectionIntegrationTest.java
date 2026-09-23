@@ -48,7 +48,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  */
 @SpringBootTest(properties = {
         "NOSTRO_PROJECTION_PASSWORD=projection-secret",
-        "nostro.projection.retry-backoff=100ms"
+        "nostro.projection.retry-backoff=100ms",
+        // A real port, never the in-process transport: metadata is what carries the Tenant (ADR-0012).
+        "spring.grpc.server.port=0"
 })
 public abstract class ProjectionIntegrationTest {
 

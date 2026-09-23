@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.nostro</groupId>
+    <artifactId>nostro-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>nostro-balance-proto</artifactId>
+  <name>Nostro :: Balance Proto</name>
+  <description>The gRPC contract between the API service and the projection: the .proto, and the stubs generated from it.</description>
+
+  <!--
+    A wire contract, so it depends on the protobuf and gRPC runtimes and on nothing of ours: if a
+    change to the domain could break this module's build, the contract would have stopped being one
+    (docs/research/grpc-and-multi-module-layout.md section 3). No hand-written class belongs here.
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-protobuf</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-stub</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!--
+        io.github.ascopes, not org.xolstice: two plugins share this artifactId, and the one every
+        tutorial and grpc-java's own README shows was last published in 2018. This one resolves protoc
+        and the gRPC codegen plugin from Maven Central for whatever OS and CPU it runs on, so neither
+        os-maven-plugin nor build-helper is needed (docs/research/grpc-and-multi-module-layout.md section 2).
+      -->
+      <plugin>
+        <groupId>io.github.ascopes</groupId>
+        <artifactId>protobuf-maven-plugin</artifactId>
+        <version>${protobuf-maven-plugin.version}</version>
+        <configuration>
+          <protoc kind="binary-maven">
+            <version>${protobuf.version}</version>
+          </protoc>
+          <plugins>
+            <plugin kind="binary-maven">
+              <groupId>io.grpc</groupId>
+              <artifactId>protoc-gen-grpc-java</artifactId>
+              <version>${grpc.version}</version>
+              <options>@generated=omit</options>
+            </plugin>
+          </plugins>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>generate</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

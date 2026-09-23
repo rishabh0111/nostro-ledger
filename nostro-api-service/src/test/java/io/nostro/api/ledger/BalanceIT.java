@@ -3,15 +3,23 @@ package io.nostro.api.ledger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.zaxxer.hikari.HikariDataSource;
 import io.nostro.api.LedgerIntegrationTest;
 import io.nostro.api.problem.ProblemType;
 import io.nostro.api.auth.ApiKey;
 import io.nostro.api.auth.Permission;
 import io.nostro.domain.AccountId;
 import io.nostro.domain.Position;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -19,8 +27,9 @@ import org.springframework.http.MediaType;
 import tools.jackson.databind.JsonNode;
 
 /**
- * The Balance read over HTTP (ADR-0007): for now a {@code SUM} over Postings behind the contract the projection
- * will serve. The response shape asserted here is the contract.
+ * The Balance read over HTTP (ADR-0007): the contract first served from a {@code SUM} over Postings and now
+ * served from the projection. Here the projection is {@link io.nostro.api.StandInProjection}; the real one
+ * meets this service in the end-to-end test.
  */
 class BalanceIT extends LedgerIntegrationTest {
 
@@ -114,7 +123,89 @@ class BalanceIT extends LedgerIntegrationTest {
         assertThat(balance(keyOfA, cashOfA).get("balance").get("amount").asString()).isEqualTo("-1.00");
     }
 
+    @Test
+    @DisplayName("the Tenant reaches the projection in the call's metadata, from the credential, without the endpoint sending it")
+    void theTenantTravelsToTheProjection() throws Exception {
+        var tenant = newTenant();
+        var key = newApiKey(tenant, Permission.LEDGER_READ, Permission.LEDGER_WRITE);
+        var cash = new AccountId(openAccount(key, "cash"));
+        int before = projection().callers().size();
+
+        balance(key, cash);
+
+        assertThat(projection().callers().subList(before, projection().callers().size())).containsExactly(tenant.value());
+    }
+
+    @Test
+    @DisplayName("a lagging projection under load does not exhaust the pool: forty reads wait for a Position, holding no connection, while writes go on")
+    void aLaggingProjectionDoesNotExhaustThePool() throws Exception {
+        var tenant = newTenant();
+        var key = newApiKey(tenant, Permission.LEDGER_READ, Permission.LEDGER_WRITE);
+        var cash = new AccountId(openAccount(key, "cash"));
+        var bank = new AccountId(openAccount(key, "bank"));
+        var reflected = recordEntry(tenant, cash, bank, 100);
+        projection().stall(tenant.value());
+        try {
+            var written = recordEntry(tenant, cash, bank, 23);
+            var pool = dataSource.unwrap(HikariDataSource.class);
+            assertThat(pool.getMaximumPoolSize()).isLessThan(40);
+
+            try (var readers = Executors.newFixedThreadPool(40)) {
+                var waiting = new ArrayList<Future<JsonNode>>();
+                for (int i = 0; i < 40; i++) {
+                    waiting.add(readers.submit(() -> balanceAtLeast(key, bank, written.position())));
+                }
+                Thread.sleep(300);
+
+                assertThat(pool.getHikariPoolMXBean().getActiveConnections()).as("connections held by waiting reads").isZero();
+                var started = Instant.now();
+                recordEntry(tenant, cash, bank, 1);
+                assertThat(Duration.between(started, Instant.now())).as("a write while forty reads wait").isLessThan(Duration.ofMillis(500));
+
+                for (var read : waiting) {
+                    // 200, with the Position the projection actually reflects: lag disclosed, not refused.
+                    var body = read.get(10, TimeUnit.SECONDS);
+                    assertThat(body.get("balance").get("amount").asString()).isEqualTo("1.00");
+                    assertThat(body.get("position").asString()).isEqualTo(reflected.position().token());
+                }
+            }
+        } finally {
+            projection().recover(tenant.value());
+        }
+    }
+
+    @Test
+    @DisplayName("a projection that does not answer is a 503 with Retry-After, after a bounded number of attempts — never a stale or invented Balance")
+    void anUnreachableProjectionIsA503() throws Exception {
+        var tenant = newTenant();
+        var key = newApiKey(tenant, Permission.LEDGER_READ, Permission.LEDGER_WRITE);
+        var cash = new AccountId(openAccount(key, "cash"));
+        projection().makeUnreachable(tenant.value());
+        try {
+            int before = projection().callers().size();
+
+            http.perform(get("/v1/accounts/{id}/balance", cash.value()).header(HttpHeaders.AUTHORIZATION, bearer(key)))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(header().string(HttpHeaders.RETRY_AFTER, "1"))
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+            assertThat(projection().callers().size() - before).as("attempts").isEqualTo(3);
+        } finally {
+            projection().recover(tenant.value());
+        }
+        assertThat(balance(key, cash).get("balance").get("amount").asString()).isEqualTo("0.00");
+    }
+
     // -- helpers ---------------------------------------------------------------------------------
+
+    private JsonNode balanceAtLeast(ApiKey key, AccountId account, Position minimum) throws Exception {
+        var result = http.perform(get("/v1/accounts/{id}/balance", account.value())
+                        .queryParam("minPosition", minimum.token())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(key)))
+                .andExpect(status().isOk())
+                .andReturn();
+        return json.readTree(result.getResponse().getContentAsString());
+    }
 
     private JsonNode balance(ApiKey key, AccountId account) throws Exception {
         var result = http.perform(get("/v1/accounts/{id}/balance", account.value()).header(HttpHeaders.AUTHORIZATION, bearer(key)))

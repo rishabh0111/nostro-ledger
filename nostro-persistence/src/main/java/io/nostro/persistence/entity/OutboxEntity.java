@@ -12,11 +12,11 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * One outbox row per Entry, written in the Entry's own transaction from the very first Entry.
- * Nothing drains it until the relay exists; it is here because the transaction that records an Entry must have
- * always written it. {@code position} (an {@code xid8}, the same value as the Entry's) is assigned
- * by the database and not mapped. The relay will mark rows with {@code published_at} and
- * {@code publish_seq}; the request path never touches those columns.
+ * One outbox row per Entry, written in the Entry's own transaction from the very first Entry, and
+ * drained into Kafka by the outbox relay, a deployable of its own (ADR-0009). {@code position} (an
+ * {@code xid8}, the same value as the Entry's) is assigned by the database and not mapped. The relay
+ * marks rows with {@code published_at} and {@code publish_seq}; the request path never touches those
+ * columns, and holds no grant that would let it.
  */
 @Entity
 @Table(name = "outbox")
