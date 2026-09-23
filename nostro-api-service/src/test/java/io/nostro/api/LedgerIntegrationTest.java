@@ -52,6 +52,7 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest(properties = {
         "NOSTRO_APP_PASSWORD=app-secret",
         "NOSTRO_CONTROL_PASSWORD=control-secret",
+        "NOSTRO_RELAY_PASSWORD=relay-secret",
         "NOSTRO_CONTROL_KEY=" + LedgerIntegrationTest.CONTROL_KEY,
         "NOSTRO_JWT_SECRET=a-test-only-signing-secret-of-at-least-32-bytes",
         "spring.jpa.properties.hibernate.generate_statistics=true"

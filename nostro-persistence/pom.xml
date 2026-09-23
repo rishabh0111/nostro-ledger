@@ -12,13 +12,23 @@
 
   <artifactId>nostro-persistence</artifactId>
   <name>Nostro :: Persistence</name>
-  <description>Hibernate entities, the Tenant-context hook, the Entry writer and the Flyway migrations for the ledger database.</description>
+  <description>Hibernate entities, the Tenant-context hook, and the Entry writer over the ledger database.</description>
 
   <!-- May depend on: domain, Hibernate, Flyway, Spring Data. Must not: gRPC, protobuf, Kafka. -->
   <dependencies>
     <dependency>
       <groupId>io.nostro</groupId>
       <artifactId>nostro-domain</artifactId>
+    </dependency>
+    <!-- The payload the Entry's transaction writes into the outbox. -->
+    <dependency>
+      <groupId>io.nostro</groupId>
+      <artifactId>nostro-outbox</artifactId>
+    </dependency>
+    <!-- The migrations Flyway runs at startup and the mapping is validated against. -->
+    <dependency>
+      <groupId>io.nostro</groupId>
+      <artifactId>nostro-ledger-schema</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>

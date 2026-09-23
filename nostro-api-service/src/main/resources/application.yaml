@@ -25,6 +25,7 @@ spring:
     placeholders:
       app_password: ${NOSTRO_APP_PASSWORD}
       control_password: ${NOSTRO_CONTROL_PASSWORD}
+      relay_password: ${NOSTRO_RELAY_PASSWORD}
 
   # Every refusal is application/problem+json (ADR-0014), including the framework's own;
   # ProblemAdvice types them and LedgerRefusals maps the domain's outcomes.

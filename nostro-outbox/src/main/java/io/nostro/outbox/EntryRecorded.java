@@ -1,19 +1,20 @@
-package io.nostro.persistence.outbox;
+package io.nostro.outbox;
 
 import io.nostro.domain.Entry;
 import io.nostro.domain.Position;
 import io.nostro.domain.TenantId;
-import io.nostro.persistence.entity.PostingEntity;
 import java.util.List;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The outbox payload: one message per Entry carrying all its Postings, so a consumer can never
- * observe an Entry mid-way (docs/research/ordering-and-watermarks.md section 4). Nothing consumes
- * it until the relay exists; the shape is fixed now because the transaction that records an Entry must have
- * always written it.
+ * The outbox payload, and the Kafka message the relay publishes it as: one message per Entry
+ * carrying all its Postings, so a consumer can never observe an Entry mid-way
+ * (docs/research/ordering-and-watermarks.md section 4).
  *
- * @param tenantId    the Tenant, which is also the partition key the relay will use
+ * <p>Written into the outbox in the Entry's own transaction, published by the relay byte for byte,
+ * applied by the projection. The relay never parses it; the two ends agree through this record.
+ *
+ * @param tenantId    the Tenant, which is also the partition key ({@link EntryTopic#key})
  * @param entryId     the Entry
  * @param position    the Position the Entry created, as its token
  * @param reverses    the Entry this one reverses, or null
@@ -33,17 +34,14 @@ public record EntryRecorded(
     public record PostingRecorded(String postingId, String accountId, String currency, long amountMinor) {
     }
 
-    public static EntryRecorded of(TenantId tenant, Entry entry, List<PostingEntity> postings, Position position) {
+    public static EntryRecorded of(TenantId tenant, Entry entry, List<PostingRecorded> postings, Position position) {
         return new EntryRecorded(
                 tenant.toString(),
                 entry.id().toString(),
                 position.token(),
                 entry.reverses().map(Object::toString).orElse(null),
                 entry.description(),
-                postings.stream()
-                        .map(p -> new PostingRecorded(p.getId().id().toString(), p.accountId().toString(),
-                                p.getAmount().currency(), p.getAmount().amountMinor()))
-                        .toList());
+                List.copyOf(postings));
     }
 
     public String toJson() {

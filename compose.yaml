@@ -31,9 +31,10 @@ services:
       NOSTRO_DB_URL: jdbc:postgresql://postgres:5432/nostro
       NOSTRO_DB_OWNER: nostro
       NOSTRO_DB_OWNER_PASSWORD: ${NOSTRO_DB_OWNER_PASSWORD:-dev-only-owner-password}
-      # The two roles the migration creates: the request path and the control plane (ADR-0015).
+      # The roles the migrations create: the request path, the control plane (ADR-0015), the relay.
       NOSTRO_APP_PASSWORD: ${NOSTRO_APP_PASSWORD:-dev-only-app-password}
       NOSTRO_CONTROL_PASSWORD: ${NOSTRO_CONTROL_PASSWORD:-dev-only-control-password}
+      NOSTRO_RELAY_PASSWORD: ${NOSTRO_RELAY_PASSWORD:-dev-only-relay-password}
       NOSTRO_JWT_SECRET: ${NOSTRO_JWT_SECRET:-dev-only-staff-token-signing-secret-of-32-bytes}
       # The control plane's bootstrap credential: `Authorization: Bearer <this>` on /control/... .
       NOSTRO_CONTROL_KEY: ${NOSTRO_CONTROL_KEY:-nc_dev-only-control-key-change-before-any-deploy}

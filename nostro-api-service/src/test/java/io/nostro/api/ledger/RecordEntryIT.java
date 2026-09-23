@@ -27,7 +27,7 @@ import io.nostro.domain.RecordOutcome.UnknownEntry;
 import io.nostro.domain.ReverseEntry;
 import io.nostro.domain.TenantId;
 import io.nostro.persistence.ledger.Accounts;
-import io.nostro.persistence.outbox.EntryRecorded;
+import io.nostro.outbox.EntryRecorded;
 import io.nostro.persistence.tenant.TenantContext;
 import java.util.List;
 import java.util.Map;

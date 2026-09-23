@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.nostro</groupId>
+    <artifactId>nostro-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>nostro-ledger-schema</artifactId>
+  <name>Nostro :: Ledger Schema</name>
+  <description>The ledger database's Flyway migrations, and nothing else.</description>
+
+  <!--
+    Resources only, so that everything which needs the ledger's schema without its JPA layer can
+    have it: the outbox relay's tests, and the migration container compose runs exactly once. The
+    API service gets it through nostro-persistence. Depends on nothing.
+  -->
+</project>

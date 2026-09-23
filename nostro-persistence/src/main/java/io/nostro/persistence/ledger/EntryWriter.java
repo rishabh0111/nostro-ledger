@@ -18,6 +18,8 @@ import io.nostro.domain.RecordOutcome.UnknownAccount;
 import io.nostro.domain.RecordOutcome.UnknownEntry;
 import io.nostro.domain.ReverseEntry;
 import io.nostro.domain.TenantId;
+import io.nostro.outbox.EntryRecorded;
+import io.nostro.outbox.EntryRecorded.PostingRecorded;
 import io.nostro.persistence.Installation;
 import io.nostro.persistence.entity.AccountEntity;
 import io.nostro.persistence.entity.EntryEntity;
@@ -25,7 +27,6 @@ import io.nostro.persistence.entity.IdempotencyRecordEntity;
 import io.nostro.persistence.entity.OutboxEntity;
 import io.nostro.persistence.entity.PostingEntity;
 import io.nostro.persistence.entity.TenantScopedId;
-import io.nostro.persistence.outbox.EntryRecorded;
 import io.nostro.persistence.tenant.TenantContext;
 import java.util.List;
 import java.util.Map;
@@ -138,8 +139,16 @@ class EntryWriter {
             return floor.get();
         }
 
-        session.insert(new OutboxEntity(tenant, entry.id(), EntryRecorded.of(tenant, entry, postingRows, position).toJson()));
+        session.insert(new OutboxEntity(tenant, entry.id(), EntryRecorded.of(tenant, entry, recorded(postingRows), position).toJson()));
         return new Recorded(entry.id(), position);
+    }
+
+    /** The Postings as the outbox carries them, each with the id its row was given. */
+    private static List<PostingRecorded> recorded(List<PostingEntity> rows) {
+        return rows.stream()
+                .map(p -> new PostingRecorded(p.getId().id().toString(), p.accountId().toString(),
+                        p.getAmount().currency(), p.getAmount().amountMinor()))
+                .toList();
     }
 
     private RecordOutcome replay(TenantId tenant, IdempotencyRecordEntity recorded, LedgerCommand command) {

@@ -181,7 +181,7 @@ header, a path segment or a body field
 - **The schema holds the invariants.** Composite tenant-scoped foreign keys, row-level security
   under a request-path role that owns nothing and bypasses nothing, a `CHECK` on every Constrained
   Account's balance, insert-only `entry` and `posting`
-  ([`V1__ledger_core.sql`](nostro-persistence/src/main/resources/db/migration/V1__ledger_core.sql),
+  ([`V1__ledger_core.sql`](nostro-ledger-schema/src/main/resources/db/migration/V1__ledger_core.sql),
   [ADR-0004](docs/adr/0004-the-schema-holds-the-balance-floor.md)).
 - **Recording an Entry is one transaction**: the Entry and its Postings, a guarded single-statement
   `UPDATE` per Constrained Account in id order, the Idempotency Key record, the outbox row
@@ -208,6 +208,9 @@ header, a path segment or a body field
 | | |
 | --- | --- |
 | [`nostro-domain`](nostro-domain/) | Pure Java: `Money`, `Entry`, `Posting`, `Position`, the sealed `RecordOutcome`, and the `EntryRecorder` and `BalanceReader` ports. Depends on the JDK alone. |
-| [`nostro-persistence`](nostro-persistence/) | The schema, the JPA mapping, the Tenant context hook, the Entry writer and the reads. |
+| [`nostro-ledger-schema`](nostro-ledger-schema/) | The ledger database's Flyway migrations, and nothing else. |
+| [`nostro-outbox`](nostro-outbox/) | The contract between the deployables: the `EntryRecorded` message, and the topic it travels on. |
+| [`nostro-persistence`](nostro-persistence/) | The JPA mapping, the Tenant context hook, the Entry writer and the reads. |
 | [`nostro-api-service`](nostro-api-service/) | The HTTP API: authentication, the control plane, the controllers, the error model, the OpenAPI document. The one executable. |
-| [`nostro-test-support`](nostro-test-support/) | The suite's singleton Postgres container. |
+| [`nostro-outbox-relay`](nostro-outbox-relay/) | The single-writer relay that drains the outbox into Kafka, in Position order. |
+| [`nostro-test-support`](nostro-test-support/) | The suite's singleton Postgres and Kafka containers. |

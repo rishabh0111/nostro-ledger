@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: nostro-outbox-relay
+
+nostro:
+  relay:
+    # The ledger, as nostro_relay: it sees every Tenant's outbox rows and can change only
+    # published_at and publish_seq (V3__outbox_relay.sql). Never the owner, never the request path.
+    database:
+      url: ${NOSTRO_DB_URL:jdbc:postgresql://localhost:5432/nostro}
+      username: nostro_relay
+      password: ${NOSTRO_RELAY_PASSWORD}
+    kafka:
+      bootstrap-servers: ${NOSTRO_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+      # One broker under compose. The topic's partition count is not here: it is schema (EntryTopic).
+      replication-factor: ${NOSTRO_KAFKA_REPLICATION_FACTOR:1}

@@ -18,9 +18,12 @@
   -->
   <modules>
     <module>nostro-domain</module>
+    <module>nostro-ledger-schema</module>
+    <module>nostro-outbox</module>
     <module>nostro-persistence</module>
     <module>nostro-test-support</module>
     <module>nostro-api-service</module>
+    <module>nostro-outbox-relay</module>
   </modules>
 
   <properties>
@@ -57,6 +60,16 @@
       <dependency>
         <groupId>io.nostro</groupId>
         <artifactId>nostro-domain</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.nostro</groupId>
+        <artifactId>nostro-ledger-schema</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.nostro</groupId>
+        <artifactId>nostro-outbox</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
