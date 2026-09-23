@@ -1,0 +1,30 @@
+
+                                                                      Allocation by Class
+
+Object Type                                                                                                                                 Allocation Pressure
+------------------------------------------------------------------------------------------------------------------------------------------- -------------------
+java.lang.reflect.Method                                                                                                                                 24.69%
+byte[]                                                                                                                                                   12.01%
+java.lang.Object[]                                                                                                                                        5.83%
+jdk.internal.vm.StackChunk                                                                                                                                5.10%
+java.lang.String                                                                                                                                          3.25%
+java.util.HashMap                                                                                                                                         2.60%
+java.util.concurrent.ConcurrentHashMap$ValueIterator                                                                                                      1.86%
+java.util.concurrent.ConcurrentHashMap$Node                                                                                                               1.54%
+java.lang.reflect.Method[]                                                                                                                                1.51%
+java.util.concurrent.ConcurrentHashMap$Node[]                                                                                                             1.49%
+java.util.ArrayList                                                                                                                                       1.45%
+java.util.HashMap$Node[]                                                                                                                                  1.44%
+java.net.URL                                                                                                                                              1.32%
+net.ttddyy.dsproxy.listener.MethodExecutionContext                                                                                                        1.23%
+java.util.concurrent.ConcurrentHashMap                                                                                                                    1.21%
+org.springframework.aop.framework.ReflectiveMethodInvocation                                                                                              1.13%
+io.micrometer.common.KeyValue[]                                                                                                                           1.09%
+io.micrometer.core.instrument.ImmutableTag                                                                                                                0.95%
+java.util.ArrayList$Itr                                                                                                                                   0.91%
+java.util.LinkedHashMap$Entry                                                                                                                             0.88%
+io.micrometer.common.KeyValues                                                                                                                            0.79%
+int[]                                                                                                                                                     0.75%
+org.springframework.boot.loader.net.protocol.jar.JarFileUrlKey                                                                                            0.71%
+java.util.HashMap$KeyIterator                                                                                                                             0.67%
+java.util.HashMap$Node                                                                                                                                    0.65%

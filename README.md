@@ -38,14 +38,24 @@ refused cross-tenant write in six requests.
 | Every refusal is an RFC 9457 body with a `type` from a closed catalog — the framework's own refusals included | [`EntriesIT.frameworkRefusalsCarryTheMalformedType`](nostro-api-service/src/test/java/io/nostro/api/ledger/EntriesIT.java), [`AuthenticationIT.noCredentialIsUnauthenticated`](nostro-api-service/src/test/java/io/nostro/api/auth/AuthenticationIT.java) |
 | The whole catalog is in the generated OpenAPI document, and every endpoint is | [`OpenApiIT.everyProblemTypeAppears`](nostro-api-service/src/test/java/io/nostro/api/docs/OpenApiIT.java), [`OpenApiIT.everyHandlerIsAnOperation`](nostro-api-service/src/test/java/io/nostro/api/docs/OpenApiIT.java) |
 | Nothing in the request path borrows a second connection inside a transaction | [`TenantContextIT.nothingInTheRequestPathOpensASecondConnectionInsideATransaction`](nostro-api-service/src/test/java/io/nostro/api/tenant/TenantContextIT.java) |
+| A Tenant's Entries are published in the order they were recorded, a late committer is never overtaken, and a relay killed mid-drain loses none | [`OutboxRelayIT.aKilledLeaderIsReplacedAndNothingIsLost`](nostro-outbox-relay/src/test/java/io/nostro/relay/OutboxRelayIT.java), [`OutboxDrainIT.aLateCommitterIsNotOvertaken`](nostro-outbox-relay/src/test/java/io/nostro/relay/OutboxDrainIT.java) |
+| The producer's ordering protection cannot be switched off by tuning: a conflicting setting fails at startup | [`ProducerSettingsTest.aConflictingSettingFailsLoudly`](nostro-outbox-relay/src/test/java/io/nostro/relay/ProducerSettingsTest.java) |
+| Every Entry published twice and then replayed from offset zero is applied once, and a Tenant's Balances sum to zero at every moment | [`EntryApplyIT.publishedTwiceAndReplayedFromZero`](nostro-projection-service/src/test/java/io/nostro/projection/EntryApplyIT.java) |
+| A message the projection cannot apply halts its partition — never skipped, never dead-lettered — and the halt is a metric at once | [`EntryApplyIT.anUnappliableMessageHaltsItsPartition`](nostro-projection-service/src/test/java/io/nostro/projection/EntryApplyIT.java) |
+| The projection isolates Tenants by the same technique, over a real socket: a call without a Tenant is refused, another Tenant's Account is empty | [`BalanceServiceIT.aCallWithNoTenantIsRefused`](nostro-projection-service/src/test/java/io/nostro/projection/BalanceServiceIT.java), [`BalanceServiceIT.anotherTenantsAccountIsAnAccountWithNoPostings`](nostro-projection-service/src/test/java/io/nostro/projection/BalanceServiceIT.java), [`ProjectionIsolationIT.aCrossTenantReadReturnsNothing`](nostro-projection-service/src/test/java/io/nostro/projection/ProjectionIsolationIT.java) |
+| A read waiting for its Position holds no connection: a lagging projection under load cannot exhaust either service's pool | [`BalanceServiceIT.parkedCallsHoldNoConnection`](nostro-projection-service/src/test/java/io/nostro/projection/BalanceServiceIT.java), [`BalanceIT.aLaggingProjectionDoesNotExhaustThePool`](nostro-api-service/src/test/java/io/nostro/api/ledger/BalanceIT.java) |
+| Every API instance draws on the same per-Tenant request budget, and a throttled caller gets a Problem Detail | [`TenantRateLimiterTest.twoInstancesShareOneBudget`](nostro-api-service/src/test/java/io/nostro/api/ratelimit/TenantRateLimiterTest.java), [`RateLimitIT.aThrottledCallerGetsAProblemDetail`](nostro-api-service/src/test/java/io/nostro/api/ratelimit/RateLimitIT.java) |
+| A stored balance that disagrees with its Postings is a metric the running system raises about itself | [`ObservabilityIT.reconciliationFailureIsAMetric`](nostro-api-service/src/test/java/io/nostro/api/ObservabilityIT.java) |
+| An Entry recorded over HTTP reaches the projected Balance through every service, and there no Tenant can see or reference another's money | [`EndToEndIT.anEntryReachesTheProjectedBalance`](nostro-system-test/src/test/java/io/nostro/system/EndToEndIT.java), [`EndToEndIT.aTenantCannotSeeOrReferenceAnothersMoney`](nostro-system-test/src/test/java/io/nostro/system/EndToEndIT.java) |
 
-Run them yourself with `./mvnw verify` (Docker required; the suite starts one Postgres container and
-one Spring context and runs everything against them — see
-[ADR-0012](docs/adr/0012-test-seams.md)).
+Run them yourself with `./mvnw verify` (Docker required: each deployable's suite starts its own
+containers — Postgres, Kafka, Redis — and one Spring context, and tests its own seam against them;
+see [ADR-0012](docs/adr/0012-test-seams.md)). The end-to-end test runs against the compose stack:
+`docker compose up --build --wait`, then `./mvnw -Pe2e -pl nostro-system-test verify`.
 
-Every push runs them against a real Postgres on GitHub Actions, and the run's summary is this table
-again, ticked from the test reports. The table is not maintained by hand on either side: a claim
-whose proof is renamed, removed or skipped fails the build rather than quietly going unproved
+Every push runs all of them on GitHub Actions, and the run's summary is this table again, ticked from
+the test reports. The table is not maintained by hand on either side: a claim whose proof is renamed,
+removed or skipped fails the build rather than quietly going unproved
 ([`ci.yml`](.github/workflows/ci.yml),
 [`ReadmeClaimsTest`](nostro-api-service/src/test/java/io/nostro/api/docs/ReadmeClaimsTest.java)).
 
@@ -225,4 +235,6 @@ header, a path segment or a body field
 | [`nostro-api-service`](nostro-api-service/) | The HTTP API: authentication, the control plane, the controllers, the error model, the OpenAPI document; a gRPC client of the projection. |
 | [`nostro-outbox-relay`](nostro-outbox-relay/) | The single-writer relay that drains the outbox into Kafka, in Position order. |
 | [`nostro-projection-service`](nostro-projection-service/) | Consumes Entries into Balances in a database of its own, at most once each, halting rather than skipping. |
-| [`nostro-test-support`](nostro-test-support/) | The suite's singleton containers: the ledger's Postgres, the projection's Postgres, Kafka. |
+| [`nostro-test-support`](nostro-test-support/) | The suites' singleton containers: the ledger's Postgres, the projection's Postgres, Kafka, Redis. |
+| [`nostro-system-test`](nostro-system-test/) | The one end-to-end test, over HTTP against the compose stack (`-Pe2e`). |
+| [`nostro-load-test`](nostro-load-test/) | Gatling, two arms, run by hand against the stack (`-Pload-test`); results in [`docs/results/`](docs/results/). |

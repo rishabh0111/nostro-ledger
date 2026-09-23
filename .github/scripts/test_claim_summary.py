@@ -86,6 +86,24 @@ class ClaimSummary(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("theCatalogIsClosed skipped", out)
 
+    def test_a_parameterized_proof_is_ticked_only_when_every_invocation_passed(self):
+        """A report names each invocation `method(Types)[n]`; the claim names the method, and needs all of them."""
+        def invocations(*outcomes):
+            cases = "".join(
+                f'<testcase name="haltsItsPartition(String, Poison)[{n}]" classname="io.nostro.projection.EntryApplyIT">'
+                + ("<failure/>" if outcome == "failed" else "") + "</testcase>"
+                for n, outcome in enumerate(outcomes, start=1))
+            return f'<testsuite name="io.nostro.projection.EntryApplyIT">{cases}</testsuite>'
+
+        claim = "A poison message halts its partition\tEntryApplyIT#haltsItsPartition\n"
+
+        code, out = self.run_summary(claim, {"io.nostro.projection.EntryApplyIT": invocations("passed", "passed")})
+        self.assertEqual(code, 0, out)
+
+        code, out = self.run_summary(claim, {"io.nostro.projection.EntryApplyIT": invocations("passed", "failed")})
+        self.assertEqual(code, 1)
+        self.assertIn("EntryApplyIT#haltsItsPartition failed", out)
+
     def test_a_class_named_as_the_proof_is_only_ticked_when_all_of_it_passed(self):
         """A claim proved by a whole class: one skipped test in it is enough to unprove the claim."""
         code, out = self.run_summary(

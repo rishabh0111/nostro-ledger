@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    Deliberately no parent. The parent imports Spring Boot's BOM, which would pin Gatling's own
+    dependencies (Netty above all) to the versions Boot manages rather than the ones Gatling is built
+    against. The load test talks to the system over HTTP and shares no code with it.
+
+    Built only with -Pload-test, and run by hand against a running stack (see README.md here): CI never
+    asserts a rate, because a throughput number from a shared runner is not defensible and a threshold
+    on one is a flaky test.
+  -->
+  <groupId>io.nostro</groupId>
+  <artifactId>nostro-load-test</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <name>Nostro :: Load Test</name>
+  <description>Gatling, two arms: one Constrained Account under contention, and the same load spread across many.</description>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <gatling.version>3.15.1</gatling.version>
+    <gatling-maven-plugin.version>4.21.12</gatling-maven-plugin.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.gatling.highcharts</groupId>
+      <artifactId>gatling-charts-highcharts</artifactId>
+      <version>${gatling.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.14.0</version>
+      </plugin>
+      <plugin>
+        <groupId>io.gatling</groupId>
+        <artifactId>gatling-maven-plugin</artifactId>
+        <version>${gatling-maven-plugin.version}</version>
+        <configuration>
+          <simulationClass>io.nostro.load.ContentionSimulation</simulationClass>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

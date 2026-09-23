@@ -34,7 +34,11 @@ def results(roots):
                     outcome = SKIPPED
                 else:
                     outcome = PASSED
-                by_test[f"{simple_name}#{case.get('name')}"] = outcome
+                # A parameterized test reports each invocation as `method(Types)[n]`; the claim names
+                # the method, which is proved only if every invocation of it passed.
+                method = case.get("name").split("(", 1)[0].split("[", 1)[0]
+                key = f"{simple_name}#{method}"
+                by_test[key] = worst(by_test.get(key, PASSED), outcome)
                 by_test[simple_name] = worst(by_test.get(simple_name, PASSED), outcome)
     return by_test
 

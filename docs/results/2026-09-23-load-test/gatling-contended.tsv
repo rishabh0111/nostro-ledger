@@ -1,0 +1,11 @@
+# Gatling: contended
+Total count	6346
+Mean count/s	52.02
+Min	29
+50th percentile	275
+75th percentile	361
+95th percentile	550
+99th percentile	741
+Max	1305
+Mean	301
+Standard Deviation	133

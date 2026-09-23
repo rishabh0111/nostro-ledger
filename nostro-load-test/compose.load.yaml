@@ -1,0 +1,13 @@
+# Laid over compose.yaml for a load-test run only (run.sh does it).
+services:
+  api:
+    environment:
+      # nostro.rate-limit.* (the dash drops out of an environment variable). Rate limiting is not what
+      # is being measured: a Tenant's budget would throttle the one Tenant each arm runs as long
+      # before the database became the limit.
+      NOSTRO_RATELIMIT_CAPACITY: "100000000"
+      NOSTRO_RATELIMIT_REFILL: "100000000"
+      # A flight recording of the whole run, written when the service stops.
+      JAVA_TOOL_OPTIONS: "-XX:StartFlightRecording=name=load-test,settings=profile,dumponexit=true,filename=/jfr/api.jfr"
+    volumes:
+      - ./nostro-load-test/target/jfr:/jfr

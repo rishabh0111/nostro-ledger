@@ -1,0 +1,23 @@
+
+                                                                       Contention by Site
+
+StackTrace                                                                                                                                Count    Avg.    Max.
+----------------------------------------------------------------------------------------------------------------------------------------- ----- ------- -------
+com.fasterxml.jackson.databind.ser.SerializerCache.addAndResolveNonTypedSerializer(Class, JavaType, JsonSerializer, SerializerProvider)       5 51.0 ms 59.7 ms
+jdk.jfr.internal.PlatformRecorder.periodicTask()                                                                                              1 47.1 ms 47.1 ms
+tools.jackson.databind.ser.SerializerCache.addAndResolveNonTypedSerializer(Class, JavaType, ValueSerializer, SerializationContext)            5 34.5 ms 39.7 ms
+sun.nio.ch.EPollSelectorImpl.clearInterrupt()                                                                                                29 17.2 ms 34.8 ms
+tools.jackson.databind.ser.SerializerCache._makeReadOnlyLookupMap()                                                                           1 33.1 ms 33.1 ms
+com.fasterxml.jackson.databind.ser.SerializerCache._makeReadOnlyLookupMap()                                                                   1 26.2 ms 26.2 ms
+sun.security.provider.NativePRNG$RandomIO.implNextBytes(byte[])                                                                               5 15.8 ms 23.4 ms
+java.lang.ClassLoader.loadClass(String, boolean)                                                                                              1 21.4 ms 21.4 ms
+org.apache.tomcat.util.collections.SynchronizedStack.push(Object)                                                                             2 14.0 ms 17.4 ms
+sun.security.provider.NativePRNG$RandomIO.implNextBytes(byte[])                                                                               5 13.1 ms 16.3 ms
+sun.security.provider.NativePRNG$RandomIO.implNextBytes(byte[])                                                                               1 15.7 ms 15.7 ms
+com.fasterxml.jackson.databind.ser.BeanSerializerFactory.constructBeanOrAddOnSerializer(...)                                                  3 14.3 ms 15.6 ms
+java.lang.ClassLoader.loadClass(String, boolean)                                                                                              1 15.2 ms 15.2 ms
+sun.security.provider.NativePRNG$RandomIO.implNextBytes(byte[])                                                                               3 12.4 ms 14.6 ms
+tools.jackson.databind.ser.BeanSerializerFactory.constructBeanOrAddOnSerializer(...)                                                          2 13.4 ms 14.1 ms
+sun.security.provider.SecureRandom.engineNextBytes(byte[])                                                                                    1 11.7 ms 11.7 ms
+java.util.concurrent.ConcurrentHashMap.replaceNode(Object, Object, Object)                                                                    1 11.4 ms 11.4 ms
+java.lang.reflect.Executable.declaredAnnotations()                                                                                            1 10.4 ms 10.4 ms

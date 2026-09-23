@@ -1,0 +1,6 @@
+# 32 concurrent users per arm, 60 s each
+arm	status	type	count
+contended	201	-	6311
+contended	422	insufficient-balance	35
+spread	201	-	12445
+spread	422	insufficient-balance	324

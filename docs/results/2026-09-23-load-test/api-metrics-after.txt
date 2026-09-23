@@ -1,0 +1,16 @@
+hikaricp_connections_acquire_seconds_count{pool="HikariPool-1"} 38514
+hikaricp_connections_acquire_seconds_sum{pool="HikariPool-1"} 1935.298911492
+hikaricp_connections_acquire_seconds_max{pool="HikariPool-1"} 0.584032092
+hikaricp_connections_max{pool="HikariPool-1"} 10.0
+hikaricp_connections_pending{pool="HikariPool-1"} 0.0
+hikaricp_connections_timeout_total{pool="HikariPool-1"} 0.0
+hikaricp_connections_usage_seconds_count{pool="HikariPool-1"} 38514
+hikaricp_connections_usage_seconds_sum{pool="HikariPool-1"} 1160.794
+hikaricp_connections_usage_seconds_max{pool="HikariPool-1"} 2.673
+nostro_ledger_entries_write_seconds_count{constrained="true",outcome="recorded"} 18821
+nostro_ledger_entries_write_seconds_sum{constrained="true",outcome="recorded"} 2051.630800816
+nostro_ledger_entries_write_seconds_count{constrained="true",outcome="refused"} 359
+nostro_ledger_entries_write_seconds_sum{constrained="true",outcome="refused"} 26.068720553
+nostro_ledger_entries_write_seconds_max{constrained="true",outcome="recorded"} 1.172261373
+nostro_ledger_entries_write_seconds_max{constrained="true",outcome="refused"} 0.477008139
+nostro_ledger_floor_rejections_total 359.0
