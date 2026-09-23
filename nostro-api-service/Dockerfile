@@ -9,6 +9,7 @@ COPY nostro-domain nostro-domain
 COPY nostro-ledger-schema nostro-ledger-schema
 COPY nostro-outbox nostro-outbox
 COPY nostro-outbox-relay nostro-outbox-relay
+COPY nostro-projection-service nostro-projection-service
 COPY nostro-persistence nostro-persistence
 COPY nostro-test-support nostro-test-support
 COPY nostro-api-service nostro-api-service

@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: nostro-projection
+
+  # The projection's own database, never the ledger's (ADR-0008), as nostro_projection: not the
+  # owner, no BYPASSRLS, and holding only the grants its migration gives it.
+  datasource:
+    url: ${NOSTRO_PROJECTION_DB_URL:jdbc:postgresql://localhost:5433/nostro_projection}
+    username: nostro_projection
+    password: ${NOSTRO_PROJECTION_PASSWORD}
+
+  # Migrations run as this database's owner and create the role above.
+  flyway:
+    url: ${NOSTRO_PROJECTION_DB_URL:jdbc:postgresql://localhost:5433/nostro_projection}
+    user: ${NOSTRO_PROJECTION_DB_OWNER:nostro}
+    password: ${NOSTRO_PROJECTION_DB_OWNER_PASSWORD}
+    placeholders:
+      projection_password: ${NOSTRO_PROJECTION_PASSWORD}
+
+nostro:
+  projection:
+    kafka:
+      bootstrap-servers: ${NOSTRO_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}

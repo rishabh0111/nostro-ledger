@@ -24,6 +24,7 @@
     <module>nostro-test-support</module>
     <module>nostro-api-service</module>
     <module>nostro-outbox-relay</module>
+    <module>nostro-projection-service</module>
   </modules>
 
   <properties>

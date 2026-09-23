@@ -1,9 +1,15 @@
 package io.nostro.outbox;
 
+import io.nostro.domain.AccountId;
+import io.nostro.domain.Currency;
 import io.nostro.domain.Entry;
+import io.nostro.domain.EntryId;
+import io.nostro.domain.Money;
 import io.nostro.domain.Position;
+import io.nostro.domain.Posting;
 import io.nostro.domain.TenantId;
 import java.util.List;
+import java.util.UUID;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -42,6 +48,42 @@ public record EntryRecorded(
                 entry.reverses().map(Object::toString).orElse(null),
                 entry.description(),
                 List.copyOf(postings));
+    }
+
+    /** The Tenant, read back. Throws {@link IllegalArgumentException} if the field is not one. */
+    public TenantId tenant() {
+        return new TenantId(uuid(tenantId, "tenantId"));
+    }
+
+    public EntryId entry() {
+        return new EntryId(uuid(entryId, "entryId"));
+    }
+
+    /** The Position the Entry created. Throws {@link IllegalArgumentException} if the token is not one. */
+    public Position createdAt() {
+        return Position.parse(position).orElseThrow(() -> new IllegalArgumentException("position is not a Position token: " + position));
+    }
+
+    /**
+     * The Postings in the domain's terms: each Account, and each Amount in a Currency the ledger
+     * knows. Throws {@link IllegalArgumentException} for anything the ledger could not have written.
+     * Whether they balance is {@link io.nostro.domain.Entry#imbalance}'s to say, not this method's.
+     */
+    public List<Posting> ledgerPostings() {
+        if (postings == null || postings.isEmpty()) {
+            throw new IllegalArgumentException("an Entry has Postings; this message has none");
+        }
+        return postings.stream()
+                .map(p -> new Posting(new AccountId(uuid(p.accountId(), "accountId")), Money.ofMinor(p.amountMinor(),
+                        Currency.lookup(p.currency()).orElseThrow(() -> new IllegalArgumentException("unknown currency " + p.currency())))))
+                .toList();
+    }
+
+    private static UUID uuid(String value, String field) {
+        if (value == null) {
+            throw new IllegalArgumentException(field + " is missing");
+        }
+        return UUID.fromString(value);
     }
 
     public String toJson() {

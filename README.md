@@ -213,4 +213,5 @@ header, a path segment or a body field
 | [`nostro-persistence`](nostro-persistence/) | The JPA mapping, the Tenant context hook, the Entry writer and the reads. |
 | [`nostro-api-service`](nostro-api-service/) | The HTTP API: authentication, the control plane, the controllers, the error model, the OpenAPI document. The one executable. |
 | [`nostro-outbox-relay`](nostro-outbox-relay/) | The single-writer relay that drains the outbox into Kafka, in Position order. |
-| [`nostro-test-support`](nostro-test-support/) | The suite's singleton Postgres and Kafka containers. |
+| [`nostro-projection-service`](nostro-projection-service/) | Consumes Entries into Balances in a database of its own, at most once each, halting rather than skipping. |
+| [`nostro-test-support`](nostro-test-support/) | The suite's singleton containers: the ledger's Postgres, the projection's Postgres, Kafka. |
